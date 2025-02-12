@@ -1,32 +1,21 @@
-# Prerequisites
-*.d
+# Windows default autosave extension
+*.asv
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
+# OSX / *nix default autosave extension
+*.m~
 
-# Precompiled Headers
-*.gch
-*.pch
+# Compiled binaries (all platforms)
+*.mex*
+*.oct
 
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
+# Simulink Code Generation
+slprj/
 
-# Fortran module files
-*.mod
-*.smod
+# Session info
+octave-workspace
 
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
+# Simulink autosave extension
+.autosave
 
-# Executables
-*.exe
-*.out
-*.app
+# Additional files from project
+*.bak
