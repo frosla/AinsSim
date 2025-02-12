@@ -17,5 +17,8 @@ octave-workspace
 # Simulink autosave extension
 .autosave
 
-# Additional files from project
+# Additional files created by project
 *.bak
+tn_*
+*.pdf
+*.djvu
