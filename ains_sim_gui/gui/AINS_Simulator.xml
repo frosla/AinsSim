@@ -1,0 +1,1673 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dialog Color="[0.941 0.941 0.941]" HPosition="center" Name="AINS_Simulator" Position="[0 400 1070 680]" Resize="off" VPosition="bottom" windowStyle="normal">
+    <GlobalSrc>%
+% The source code written here will be executed when
+% windows load. Works like 'onLoad' event of other languages.
+%
+
+set(AINS_Simulator.figure, 'visible', 'off');
+
+global default_settings;
+global local_settings;
+global param_project;
+global param_setup;
+global param_visual;
+global depot;
+global domains;
+global doDebug;
+global P;	% density matrix
+
+doDebug = 2;
+P = [];
+
+pkg load image
+%pkg load matgeom
+
+%-----------------------------------------------------------------------
+%
+% possible menu
+%
+%g = uimenu('text', '&amp;General', 'accelerator', 'g');
+%openProject = uimenu (p, 'text', '&amp;Open project', 'accelerator', 'o', 'menuselectedfcn', 'disp(&quot;open&quot;)');
+%uimenu (p, 'text', '&amp;Save project', 'accelerator', 's', 'menuselectedfcn', 'disp(&quot;save&quot;)');
+%uimenu (p, 'text', 'Save project &amp;As...', 'accelerator', 'A', 'menuselectedfcn', 'disp(&quot;save As...&quot;)');
+%closeProject = uimenu (g, 'text', 'Close', 'accelerator', 'q', 'menuselectedfcn', 'close(gcf)');
+
+%e = uimenu ('text', '&amp;Edit', 'accelerator', 'e');
+%uimenu (e, 'text', 'Toggle &amp;grid', 'accelerator', 'g', 'menuselectedfcn', 'grid (gca)');
+%uimenu (e, 'text', 'Show &amp;colorbar', 'accelerator', 'c', 'menuselectedfcn', 'colorbar (gca)');
+%uimenu (e, 'text', 'Hide &amp;Colorbar', 'accelerator', 'C', 'menuselectedfcn', 'colorbar (gca, &quot;hide&quot;)');
+%uimenu (e, 'text', 'param setup', 'menuselectedfcn', 'openvar(&quot;param_setup&quot;)');
+%uimenu (e, 'text', 'param visible', 'menuselectedfcn', 'openvar(&quot;param_visible&quot;)');
+
+% use callback to set title and tooltip with project info
+%set(openProject, 'callback', {@callBack_open_project_fcn, AINS_Simulator});
+
+% use callback to close all dialogs
+%set(closeProject, 'callback', {@callBack_close_fcn, AINS_Simulator});
+%-----------------------------------------------------------------------
+
+
+% use callback to save edited values immediately
+%set(AINS_Simulator.Table_1, 'keyreleasefcn', {@callBack_Table_1_fcn, AINS_Simulator});
+
+% set defaults
+%project
+
+% check for first start...
+isFirstStart = false;
+
+% load preferences - may replace default settings
+if isfile('AinsSim.pref')
+  load AinsSim.pref
+  disp('...preferences loaded')
+  %  disp(param_project.active_folder)
+  
+  % move main figure to its last position ONLY IF size hasn't changed
+  current_pos = get(AINS_Simulator.figure, 'position');
+  
+  %  keep size, i.e. current_pos(3:4) == default_settings.main_position(3:4)
+  default_settings.main_position(3:4) = current_pos(3:4);
+  set(AINS_Simulator.figure, 'position', default_settings.main_position);
+  
+  dbg_disp('set position: ', doDebug, __FILE__, __LINE__);
+  dbg_disp(default_settings.main_position, doDebug, __FILE__, __LINE__);
+else
+  isFirstStart = true;	% we have to fix the paths at first start
+  param_project.project_path = [pwd() '/projects'];
+  param_project.active_folder = 'project1';
+  param_project.last_visited_folder = param_project.active_folder;  % used for status message
+  param_project.active_file = 'default.o1';
+  %param_project.active_icon = 'kig';
+  disp('...param_project created')
+end
+
+% first load, then check -&gt; load replaces the structure	-&gt; set start folder BEFORE changing directory
+if ~exist('default_settings') || isempty(default_settings)
+  default_settings.startdir = pwd();	% just create a structure
+  puts('set startdir: ');
+  puts('...default_settings created, startdir: ')
+  disp(default_settings.startdir);
+end
+if (~isfield(default_settings, 'startdir'))
+  default_settings.startdir = pwd(); 
+  puts('set startdir: ');
+  disp(default_settings.startdir);
+else
+  cd(default_settings.startdir);
+end
+
+% change directory to project path
+cd(param_project.project_path);
+
+% local settings, i.e. fixed with code
+local_settings.flt_fileext = {&quot;*.o1;*.j1;*.ains&quot;, &quot;Supported Formats&quot;};
+local_settings.default_fileext = '.o1';
+local_settings.icon_dialog_no = 'dialog-no-2.png';
+local_settings.icon_dialog_ok = 'dialog-ok-2.png';
+
+
+% local_settings as fallback for default_settings
+%disp('AINS_Simulator -&gt; main: working dir:')
+local_settings.default_icon_path  = strrep([param_project.project_path '/_icons'], '\', '/'); 
+local_settings.default_icon       = strrep([local_settings.default_icon_path '/kig.png'], '\', '/'); 
+local_settings.default_file       = [param_project.project_path '\_icons\default\default.o1']; 
+%local_settings.icon_dialog_no     = 'dialog-no-2.png'; end
+%local_settings.icon_dialog_ok     = 'dialog-ok-2.png'; end
+local_settings.icon_AINS          = 'AINS_16x16.png'; 
+local_settings.main_position      = get(AINS_Simulator.figure, 'position'); 
+
+
+%domains.meters = [param_setup.x_min param_setup.y_min param_setup.x_max param_setup.y_max];
+domains.percent = [0 0 1 1];
+%domains.cells = [0 0 param_setup.Xmax param_setup.Ymax];
+domains.METERS = 1;
+domains.PERCENT = 2;
+domains.CELLS = 3;
+
+domains.X_MIN = 1;		% x start position
+domains.Y_MIN = 2;		% y start position 
+domains.X_MAX = 3;		% x end position in materials
+domains.Y_MAX = 4;		% y end position in materials
+domains.MAT_TYPE =5;		% material type in materials
+
+domains.SIGMA = 5;		% x end position in sources
+%domains.OPENING = 4;		% y end position in sources
+%domains.VELOCITY = 5;		% velocity in sources
+
+domains.ADD_PHI = 6;		% additional phi (for sources; materials phi should be defined in depot)
+domains.DOM = 7:10;		% start position for domain
+domains.DOM_DEF = 11;		% definition of domain (absolute=domains.METERS, domains.PERCENT, domains.CELLS)
+
+domains.MAT_SRC_IND = 12;	% position in param_setup.materials(:,domains.MAT_SRC_IND) to identify:
+domains.MAT_IND = 1000;		% ...if it's a material
+domains.SRC_IND = 2000;		% ...or a source
+
+domains.ROT = 13;		% rotation
+domains.X_ROT = 14;		% x-position of rotation
+domains.Y_ROT = 15;		% x-position of rotation
+
+
+% load active file
+callBack_open_project_fcn([], [], AINS_Simulator);
+
+
+
+if isFirstStart
+  % open Project Manager for the first time...
+  AINS_Simulator_b_project_doIt([], [], AINS_Simulator);	########## FIRST START ONLY ##################################################################
+end
+
+%% clear old structures:
+depot.materials = [];
+
+
+%
+% populate figure
+%
+callBack_populate_figure_fcn([], [], AINS_Simulator);
+callBack_show_image_fcn([], [], AINS_Simulator);
+
+
+% move close request to close fcn
+set(AINS_Simulator.figure, 'closerequestfcn', {@callBack_close_fcn, AINS_Simulator});
+
+% set AINS ICON -&gt; does not work yet...?
+%set(AINS_Simulator.figure, 'pointershapecdata', default_settings.icon_AINS);
+
+set(AINS_Simulator.figure, 'numbertitle', 'off');
+set(AINS_Simulator.figure, 'name', 'AINS Simulator V1.0');
+
+
+set(AINS_Simulator.figure, 'visible', 'on');
+
+%ret = AINS_Simulator;
+%return;   % cheat for guiEditor: ret = AINS_Simulator; afterwards being ignored
+
+refresh();
+
+%AINS_Simulator_b_setup_doIt([], [], AINS_Simulator);	########## DEVELOPING PART #########################
+</GlobalSrc>
+    <uiControl class="imgCtrl" FontAngle="normal" FontName="Arial" FontSize="8" FontWeight="normal" Name="Image_1" Position="[496 37 530 530]" visible="on"/>
+    <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="" Name="b_setup" Position="[99 503 74 47]" String="Setup" TooltipString="" visible="on">% This code will be executed when user click the button control.
+
+global depot_material;	% depot with different types of materials
+global depot_sources;	% depot with different types of sources
+global param_setup;
+global param_project;
+global dlgME1dStatus;
+global doDebug;
+
+dbg_disp('entering b_materials');
+
+dlgME1dStatus = 'running'; 
+setappdata(AINS_Simulator.figure, 'status', 'running');
+
+wnd = Setup_editor();
+waitfor(wnd.figure);
+
+dbg_disp('back on b_materials after ending of Material_Editor_1d');
+
+setappdata(AINS_Simulator.figure, 'status', 'closed');
+
+% for open or create action save current parameters
+if strcmp(dlgME1dStatus, 'added') || strcmp(dlgME1dStatus, 'deleted')
+  % SET param_project
+
+  % save
+  AINS_Simulator_b_save_doIt([], [], AINS_Simulator); 
+end
+
+disp('b_materials -&gt; status: closed')
+
+callBack_show_image_fcn([], [], AINS_Simulator);
+
+%param_setup
+%param_setup.sources = [-2.5,0,0.35,1,0.06,0.0000001,1,0,0,0];
+%param_setup.materials = [0,0,0.3,350,4,0;1,0,1.3,350,4,0];  ## [x_min y_min x_max ymax transmittivity phi_extra; ...]
+</uiControl>
+    <uiControl class="cmbCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="cb_colormap" Position="[284 513 113 26]" String="ainscolormap|ainscolormap2|jet|turbo|hot|cool|spring|summer|autumn|winter" TooltipString="" visible="on">% The code added here will be executed when an item is selected from
+% the list (even if the same value is selected that was already set)
+
+global param_setup;
+global param_visual;
+global doDebug;
+
+
+cMap = get(AINS_Simulator.cb_colormap, 'string');
+value = get(AINS_Simulator.cb_colormap, 'value');
+res = strsplit(cMap, '|'){value};
+dbg_disp(sprintf('set colormap %s\n', res), doDebug, __FILE__, __LINE__);
+
+colormap(res);
+
+param_visual.colormap = res;
+</uiControl>
+    <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="" Name="b_depot" Position="[18 503 74 47]" String="Depot" TooltipString="" visible="on">% This code will be executed when user click the button control.
+
+global depot_material;	% depot with different types of materials
+global depot_sources;	% depot with different types of sources
+global param_setup;
+global param_project;
+global dlgDE1dStatus;
+global doDebug;
+
+dbg_disp('entering b_materials');
+
+dlgDE1dStatus = 'running'; 
+setappdata(AINS_Simulator.figure, 'status', 'running');
+
+wnd = Depot_editor();
+waitfor(wnd.figure);
+
+dbg_disp('back on b_materials after ending of Material_Editor_1d');
+
+setappdata(AINS_Simulator.figure, 'status', 'closed');
+
+% for open or create action save current parameters
+if strcmp(dlgDE1dStatus, 'added') || strcmp(dlgDE1dStatus, 'deleted')
+  % SET param_project
+
+  % save
+  AINS_Simulator_b_save_doIt([], [], AINS_Simulator); 
+end
+
+disp('b_materials -&gt; status: closed')
+
+callBack_show_image_fcn([], [], AINS_Simulator);
+
+%param_setup.sources = [-2.5,0,0.35,1,0.06,0.0000001,1,0,0,0];
+%param_setup.materials = [0,0,0.3,350,4,0;1,0,1.3,350,4,0];  ## [x_min y_min x_max ymax transmittivity phi_extra; ...]
+</uiControl>
+    <uiControl class="cmbCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="cb_solver" Position="[33 305 122 26]" String="Monte Carlo 1d|Monte Carlo 2d" TooltipString="" visible="on">% The code added here will be executed when an item is selected from
+% the list (even if the same value is selected that was already set)
+
+global param_setup;
+global param_visual;
+global doDebug;
+
+
+cMap = get(AINS_Simulator.cb_solver, 'string');
+value = get(AINS_Simulator.cb_solver, 'value');
+res = strsplit(cMap, '|'){value};
+dbg_disp(sprintf('set solver %s\n', res), doDebug, __FILE__, __LINE__);
+
+param_setup.active_solver = res;
+</uiControl>
+    <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="media-playback-start-7.png" Name="b_simulate" Position="[354 170 69 51]" String="" TooltipString="Simulate" visible="on">% This code will be executed when user click the button control.
+
+global depot_material;	% depot with different types of materials
+global depot_sources;	% depot with different types of sources
+global param_setup;
+global doDebug;
+global P;
+global depot;
+global domains;
+global simulation;	% used to stop simulations
+
+if rows(param_setup.sources) == 0
+  msgbox('No sources defined yet');
+  return;
+end
+
+axis(AINS_Simulator.Image_1);
+%sim_mc_2d
+
+%['mirror'; 'vacuum'; 'semi mirror'; 'mirror film'; 'barrier'; 'high-r barrier'],...
+%depot_material =...
+%[[0 1 0.5 0.92 0.98 0.999];   % transmission factor
+%[1 0 0.5 0.08 0.02 0.001];   % reflection factor
+%[1 1   0    1    1     1];   % film: trans/refl per leyer: 1 = yes; else trans/refl at borders only
+%[1 1   1    1    1     1]];  % refraction index
+%DEPOT_TRANS = 1;
+%DEPOT_REFL = 2;
+%DEPOT_FILM = 3;
+%DEPOT_REFR_IDX = 4;
+if ~exist('depot') || ~isfield(depot, 'adv_materials')
+  depot.material_names =['mirror'; 'vacuum'; 'semi mirror'; 'mirror film'; 'barrier'; 'high-r barrier'];
+  depot.adv_materials =...
+  [[0 1 0.5 0.92 0.98 0.999];   % t_out_in transmission factor
+   [0 1 0.5 0.92 0.98 0.999];   % t_in_in  
+   [0 1 0.5 0.92 0.98 0.999];   % t_in_out  
+   [0 0 0   0    0    0    ];   % phi_t_out_in additional phi at transmission
+   [0 0 0   0    0    0    ];   % phi_t_in_in  
+   [0 0 0   0    0    0    ];   % phi_t_in_out  
+   [1 0 0.5 0.08 0.02 0.001];   % r_out_in reflection factor
+   [1 0 0.5 0.08 0.02 0.001];   % r_in_in
+   [1 0 0.5 0.08 0.02 0.001];   % r_in_out
+   [0 0 0   0    0    0    ];   % phi_r_out_in additional phi at transmission
+   [0 0 0   0    0    0    ];   % phi_r_in_in  
+   [0 0 0   0    0    0    ];   % phi_r_in_out  
+   [1 1   1    1    1     1];   % refraction index
+   [0 0   0    0    0     0]];  % use refraction index -&gt; if '1' then use only refraction index!
+  depot.toi = 1;
+  depot.tii = 2;
+  depot.tio = 3;
+  depot.phi_toi = 4;
+  depot.phi_tii = 5;
+  depot.phi_tio = 6;
+  depot.roi = 7;
+  depot.rii = 8;
+  depot.rio = 9;
+  depot.phi_roi = 10;
+  depot.phi_rii = 11;
+  depot.phi_rio = 12;
+  depot.refr_idx = 13;
+  depot.use_refraction = 14;
+end
+
+h_bar = 1.055D-34;
+c = 3D8;
+
+if strcmp(param_setup.particle, 'neutron')
+  m_n = 1.675D-27; D_n = h_bar/(2*m_n); E_n = 1.51D-10; lambda_n = 30D-10;        # neutron
+  D = D_n; lambda = lambda_n; m = m_n; # define particle to be used
+else % electron
+  m_e = 9.109381900D-31; D_e = h_bar/(2*m_e); lambda_e = 1.63D-21; e = 1.602D-19; # electron
+  D = D_e; lambda = lambda_e; m = m_e; # define particle to be used
+end
+
+
+%setup.sources = [-0.0000025   0.   0.35   1.   0.06   0.0000001   1.   0.   0.   0.];
+%setup.pos = -0.0000025;
+%setup.materials = [0.         0.   0.0000003   0.35   4.   0.;...
+%0.000001   0.   0.0000013   0.35   4.   0.];
+%setup.domain = [-0.00001,0,0.00001,0.35];
+%setup.X_max = 400;
+%setup.T_max = 401;
+
+%setup.sx = 5.000D-08;
+%setup.st = 2.405D-08;
+%setup.sy = 0.000875;
+
+%setup.sigma_0 = 2.000D-08;
+%setup.sigma_g = 0.001;
+%setup.hyp_cent = 1.974D-11;
+%setup.v_y = 36384.25;
+
+%v_y = setup.v_y;
+%sx = setup.sx;
+%st = setup.st;%// * v_y;
+
+%_f = m/h_bar * sx^2/st /2;
+
+sx = m * (param_setup.x_max - param_setup.x_min) / param_setup.Xmax;
+sy = m * (param_setup.y_max - param_setup.y_min) / param_setup.Ymax;
+
+%// prepare materials
+material = int8(zeros(param_setup.Xmax, 1));
+
+if rows(param_setup.materials) &gt; 0
+  disp(param_setup);
+  param_setup.materials(:, domains.DOM);
+  transformedRect = transformMatSrcD2(param_setup.materials,...
+                                    domains.DOM,...
+                                    [1 1 param_setup.Xmax param_setup.Ymax]);
+
+  mat_count = size(param_setup.materials,1); %#mat_get('count', setup.materials);
+  if mat_count &gt; 0
+    for n = 1:mat_count
+      rect = fix(transformedRect(n,:));
+      idx_mat = rect(5);
+
+      material(rect(1):rect(3)) = -idx_mat;
+    end
+    material(1) = 0;   %// do not allow material at borders
+    material(end) = 0;
+  end
+end
+
+sources = transformMatSrcD2(param_setup.sources,...    %[-0.00001,0,0.00001,0.35],...  %[-5e-6 0 5e-6 10], 
+                        domains.DOM,...
+                        [1 1 param_setup.Xmax param_setup.Ymax]);
+% WORKAROUND: transform sigmas
+%sources(:,5:6) = transformD1D2(sources(:,5:6),...
+%                        [-0.00001,0,0.00001,0.35],...  %[-5e-6 0 5e-6 10], 
+%                        [1 1 param_setup.Xmax param_setup.Ymax])
+
+
+USE_ENGINE_VERBOSE = 0;
+
+
+P = sim_mc_adv_1d (...
+	param_setup.Xmax, param_setup.Ymax,...
+	sources,...
+	material, depot.adv_materials,...
+	sx, sy,...
+	param_setup.coherent,...
+	0,...	% 0 -&gt; calculate CALLS out of engine_runs_per_call  //param_setup.calls,...
+	param_setup.engine_runs_per_call,...
+	param_setup.use_engine_cc,...
+	USE_ENGINE_VERBOSE);
+
+callBack_show_image_fcn([], [], AINS_Simulator);
+</uiControl>
+    <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="preferences-desktop-printer-2.png" Name="b_print" Position="[354 257 69 49]" String="" TooltipString="Print" visible="on">% This code will be executed when user click the button control.
+global P;
+global param_project;
+global param_visual;
+global default_settings;
+
+printdir = [param_project.project_path '/' param_project.active_folder];
+icondir = default_settings.default_icon_path; %([param_project.project_path '/_icons']);
+%mkdir(printdir)
+%disp(sprintf('...created dir: %s', printdir));
+
+[dir, name, ext] = fileparts(param_project.active_file);
+file = [printdir '/' name '@' datestr(now(), 'ddmmyy-HHMM')]
+
+figure(22001); % figure(param_figure.print));
+@callBack_show_image_fcn([], [], AINS_Simulator);
+%test_sim_mc_1d
+%grid off
+%axis off
+%set(gcf, 'visible', 'off');
+% pos = get(gcf, 'position');
+% set(gcf, 'position', [pos(1:2) param_print.size]);
+%set(gca, 'LooseInset', [0 0 0 0])
+%set(gca, 'fontsize', 1)
+
+
+if rows(P) &gt; 0
+  pngFile = [file '.png'];
+  %%print_options = ['&quot;-S' num2str(param_print.size(1)) ',' num2str(param_print.size(2)) '&quot;'];
+  %print(&quot;-dpng&quot;, &quot;-FTimes-Roman:10&quot;, pngFile); %, print_options, file);
+  %%print -dpng -FTimes-Roman:10 file
+
+  Q1 = mat2gray(rot90(P));
+  I = gray2ind(Q1);
+  RGB = ind2rgb(I, ainscolormap);
+  %imagesc(RGB)
+  %imwrite(RGB, pngFile);
+
+  imwrite(imresize(RGB, [256 256]), file = [icondir '/tn_' param_project.active_folder '_' name '.png']);   % latest file -&gt; for preview
+  imwrite(RGB, file = [printdir '/' name '.png']);   % latest file -&gt; for preview
+end
+
+%close(gcf())
+%return
+
+%h = gco(AINS_Simulator.Image_1);   ################ TODO: fix that!
+
+%get(gca())
+
+pdfFile = [file '.pdf'];
+%print(&quot;-dpdfwrite&quot;, &quot;-FTimes-Roman:10&quot;, pdfFile);
+print(&quot;-dpdfcrop&quot;, &quot;-bestfit&quot;, pdfFile);
+%print -dpdfcrop -bestfit -FTimes-Roman:10 file
+
+#################### TODO: check matlab2tikz
+%TeXFile = [file '.tex'];
+%param_print.doStandalone = true; % true for preview
+%matlab2tikz('standalone', param_print.doStandalone, TeXFile);
+
+close(gcf())
+
+%save_options = ['-dpng -S&quot;' num2str(param_print.size(1)) ',' num2str(param_print.size(2)) '&quot; -FTimes-Roman:10'];
+if exist('P')
+  saveFile = [file '.info'];
+%  save(&quot;-mat7-binary&quot;, saveFile, &quot;P&quot;);	% save additional information about the figure -&gt; TODO: FIT THAT
+end
+
+
+disp('...printig done')
+</uiControl>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="12" FontWeight="bold" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="center" isAutoSize="false" Name="Label_project" Position="[29 24 407 25]" String="Project name" TooltipString="" visible="on">% In favor of generality, the possibility of adding a default callback
+% to a text control has been included. But you should note that this
+% control has no possibility to interact with the user.
+% This is why, unless you know exactly what you want to do, you may not
+% need to do anything here.</uiControl>
+    <uiControl class="callBackCtrl" Arguments="AINS_Simulator" functionName="callBack_open_project_fcn" Name="callBack_open_project" Position="[350 10 52 52]">% This code can define a callback.
+% You must associate them to figure or control onload like event window
+
+global param_setup;
+global param_project;
+global param_visual;
+global default_settings;
+global depot;
+global doDebug;
+
+pwd()
+filename = [param_project.active_folder '/' param_project.active_file]
+
+if !isfile(filename)
+  puts('WARNING - filename does not exist: ')
+  disp(filename)
+  return;
+end
+
+[dir, name, ext] = fileparts(filename)
+if strcmp(ext, '.ains')
+  disp('load .ains file');	% standard text used in SciLab files
+  str = fileread(filename);
+  evalc(str);
+elseif strcmp(ext, '.a1') || strcmp(ext, '.a2')
+  disp('load .a1 file');	% easy readable text like in .ains but rendered with simple algorithm by octave
+  str = fileread(filename);
+  evalc(str);
+elseif strcmp(ext, '.o1')
+  disp('load .o1 file');	% octave text file - easy to use but not as easy to read as the other files
+  load(filename);
+elseif strcmp(ext, '.j1') || strcmp(ext, '.j2')
+  disp('load .j1 file');	% json text file
+  fid = fopen(source_file, 'r');
+  text = '';
+  while 1
+    txt = fgets(fid);
+    if txt == -1
+      break;
+    end
+    text = [text txt];
+  endwhile
+  fclose(fid);
+
+  s = jsondecode(text);
+  param_setup  = s.param_setup;		% TODO: how to optimize this? 
+  param_visual = s.param_visual;
+  depot        = s.depot;
+
+end
+
+filename = [param_project.active_folder ': ' param_project.active_file]
+set(AINS_Simulator.Label_project, 'string', filename);
+set(AINS_Simulator.Label_project, 'tooltipstring', filename);
+
+
+%disp('AINS_Simulator -&gt; main: working dir:')
+if (~isfield(default_settings, 'default_icon_path')), default_settings.default_icon_path  = strrep([param_project.project_path '/_icons'], '\', '/'); end
+if (~isfield(default_settings, 'default_icon')),      default_settings.default_icon       = strrep([default_settings.default_icon_path '/kig.png'], '\', '/'); end
+if (~isfield(default_settings, 'default_file')),      default_settings.default_file       = [param_project.project_path '\_icons\default\default.o1']; end
+%if (~isfield(default_settings, 'icon_dialog_no')),    local_settings.icon_dialog_no     = 'dialog-no-2.png'; end
+%if (~isfield(default_settings, 'icon_dialog_ok')),    local_settings.icon_dialog_ok     = 'dialog-ok-2.png'; end
+if (~isfield(default_settings, 'icon_AINS')),         default_settings.icon_AINS          = 'AINS_16x16.png'; end
+if (~isfield(default_settings, 'main_position')),     default_settings.main_position      = get(AINS_Simulator.figure, 'position'); end
+
+
+if ~exist('param_visual') || isempty(param_visual)
+  param_visual.section = 0;	% just create a structure
+  disp('...param_visual created')
+end
+
+% set defaults
+if (~isfield(param_visual, 'title')), param_visual.title = 'Title'; end
+if (~isfield(param_visual, 'xlabel')), param_visual.xlabel = 'x'; end
+if (~isfield(param_visual, 'ylabel')), param_visual.ylabel = 'y'; end
+if (~isfield(param_visual, 'show_title')), param_visual.show_title = 1; end
+if (~isfield(param_visual, 'show_xlabel')), param_visual.show_xlabel = 1; end
+if (~isfield(param_visual, 'show_ylabel')), param_visual.show_ylabel = 1; end
+if (~isfield(param_visual, 'show_colormap')), param_visual.show_colormap = 0; end
+if (~isfield(param_visual, 'show_grid')), param_visual.show_grid = 0; end
+if (~isfield(param_visual, 'show_traj')), param_visual.show_traj = 1; end
+if (~isfield(param_visual, 'num_traj')), param_visual.num_traj = 15; end
+if (~isfield(param_visual, 'traj_tuning')), param_visual.traj_tuning = [-2 2]; end
+if (~isfield(param_visual, 'show_flux')), param_visual.show_flux = 1; end
+if (~isfield(param_visual, 'show_density')), param_visual.show_density = 1; end
+if (~isfield(param_visual, 'show_real_area')), param_visual.show_real_area = 0; end
+if (~isfield(param_visual, 'title_font_size')), param_visual.title_font_size = 14; end
+if (~isfield(param_visual, 'label_font_size')), param_visual.label_font_size = 11; end
+if (~isfield(param_visual, 'colormap')), param_visual.colormap = 'ainscolormap'; end
+if (~isfield(param_visual, 'show_sources')), param_visual.show_sources = 0; end
+if (~isfield(param_visual, 'show_materials')), param_visual.show_materials = 0; end
+if (~isfield(param_visual, 'traj_linewidth')), param_visual.traj_linewidth = 0.1; end
+if (~isfield(param_visual, 'fontname')), param_visual.fontname = 'Arial'; end
+
+if ~exist('param_setup') || isempty(param_setup)
+  param_setup.active_solver = 'Monte Carlo 1d';		% just create a structure
+  disp('...param_setup created')
+end
+
+% set defaults
+if (~isfield(param_setup, 'active_solver')), param_setup.active_solver = 'Monte Carlo 1d'; end
+if (~isfield(param_setup, 'particle')), param_setup.particle = 'electron'; end
+if (~isfield(param_setup, 'lambda')), param_setup.lambda = 1.63D-21; end
+if (~isfield(param_setup, 'colormap')), param_setup.colormap = 'ainscolormap'; end
+if (~isfield(param_setup, 'Xmax')), param_setup.Xmax = 400; end
+if (~isfield(param_setup, 'Ymax')), param_setup.Ymax = 400; end
+if (~isfield(param_setup, 'x_min')), param_setup.x_min = -10e-6; end
+if (~isfield(param_setup, 'y_min')), param_setup.y_min =   0; end
+if (~isfield(param_setup, 'x_max')), param_setup.x_max =  10e-6; end
+if (~isfield(param_setup, 'y_max')), param_setup.y_max =  10; end
+if (~isfield(param_setup, 'use_engine_cc')), param_setup.use_engine_cc = 1; end
+if (~isfield(param_setup, 'engine_runs_per_call')), param_setup.engine_runs_per_call = 100000; end
+if (~isfield(param_setup, 'calls')), param_setup.calls = 1; end
+if (~isfield(param_setup, 'coherent')), param_setup.coherent = 1; end
+if (~isfield(param_setup, 'sources')), param_setup.sources = [-2.5,0,0.35,1,0.06,0.0000001,1,0,0,0]; end
+if (~isfield(param_setup, 'materials')), param_setup.materials = [0,0,0.3,350,4,0;1,0,1.3,350,4,0]; end		## [x_min y_min x_max ymax mat.type phi_extra; ...]
+
+
+if ~exist('depot') || ~isfield(depot, 'adv_materials')
+  depot.material_names =['mirror'; 'vacuum'; 'semi mirror'; 'mirror film'; 'barrier'; 'high-r barrier'];
+%  depot.materials =...
+%  [[0 1 0.5 0.92 0.98 0.999];   % transmission factor
+%   [1 0 0.5 0.08 0.02 0.001];   % reflection factor
+%   [1 1   0    1    1     1];   % film: trans/refl per leyer: 1 = yes; else trans/refl at borders only
+%   [1 1   1    1    1     1]];  % refraction index
+%  depot.DEPOT_TRANS = 1;
+%  depot.DEPOT_REFL = 2;
+%  depot.DEPOT_FILM = 3;
+%  depot.DEPOT_REFR_IDX = 4;
+  depot.adv_materials =...
+  [[0 1 0.5 0.92 0.98 0.999];   % t_out_in transmission factor
+   [0 1 0.5 0.92 0.98 0.999];   % t_in_in  
+   [0 1 0.5 0.92 0.98 0.999];   % t_in_out  
+   [0 0 0   0    0    0    ];   % phi_t_out_in additional phi at transmission
+   [0 0 0   0    0    0    ];   % phi_t_in_in  
+   [0 0 0   0    0    0    ];   % phi_t_in_out  
+   [1 0 0.5 0.08 0.02 0.001];   % r_out_in reflection factor
+   [1 0 0.5 0.08 0.02 0.001];   % r_in_in
+   [1 0 0.5 0.08 0.02 0.001];   % r_in_out
+   [0 0 0   0    0    0    ];   % phi_r_out_in additional phi at transmission
+   [0 0 0   0    0    0    ];   % phi_r_in_in  
+   [0 0 0   0    0    0    ];   % phi_r_in_out  
+   [1 1   1    1    1     1];   % refraction index
+   [0 0   0    0    0     0]];  % use refraction index -&gt; if '1' then use only refraction index!
+  depot.toi = 1;
+  depot.tii = 2;
+  depot.tio = 3;
+  depot.phi_toi = 4;
+  depot.phi_tii = 5;
+  depot.phi_tio = 6;
+  depot.roi = 7;
+  depot.rii = 8;
+  depot.rio = 9;
+  depot.phi_roi = 10;
+  depot.phi_rii = 11;
+  depot.phi_rio = 12;
+  depot.refr_idx = 13;
+  depot.use_refraction = 14;
+else
+  disp('...depot NOT created')
+end
+
+</uiControl>
+    <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="document-open-folder.png" Name="b_project" Position="[28 68 212 43]" String="Project" TooltipString="" visible="on">% This code will be executed when user click the button control.
+
+global param_setup;
+global param_visible;
+global param_project;
+global dlgAinsProjectStatus;
+
+dlgAinsProjectStatus = 'running'; 
+setappdata(AINS_Simulator.figure, 'status', 'running');
+
+wnd = AINS_project();
+waitfor(wnd.figure);
+
+%dlgAinsProjectStatus
+
+setappdata(AINS_Simulator.figure, 'status', 'closed');
+
+% for open or create action save current parameters
+if strcmp(dlgAinsProjectStatus, 'open') || strcmp(dlgAinsProjectStatus, 'create')
+  % SET param_project
+
+  clearvars param_setup param_visible;
+
+  % open project
+  callBack_open_project_fcn([], [], AINS_Simulator);
+
+  % save
+%  AINS_Simulator_b_save_doIt([], [], AINS_Simulator); 
+
+%  dlgAinsProjectStatus
+end
+
+disp('b_project -&gt; status: closed')
+
+%callBack_open_project_fcn([], [], AINS_Simulator);
+callBack_show_image_fcn([], [], AINS_Simulator);
+
+</uiControl>
+    <uiControl class="callBackCtrl" Arguments="AINS_Simulator" functionName="callBack_close_fcn" Name="callBack_close" Position="[5 590 52 52]">% This code can define a callback.
+% You must associate them to figure or control onload like event window
+
+%status = getappdata(AINS_Simulator.figure, 'status');
+
+%if (strcmp(status, 'running'))
+%  close(AINS_project.figure);	   % obsolet if dialog is modal
+%end
+%close(AINS_Simulator.figure);
+
+global default_settings;
+global doDebug;
+
+
+set(AINS_Simulator.figure, 'visible', 'off');
+
+% save
+AINS_Simulator_b_save_doIt([], [], AINS_Simulator); 
+
+closereq();
+
+disp('program finished')</uiControl>
+    <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="document-save.png" Name="b_save" Position="[354 320 69 49]" String="Save" TooltipString="" visible="on">% This code will be executed when user click the button control.
+
+global param_setup;
+global param_project;
+global param_visual;
+global default_settings;
+global doDebug;
+global depot;
+
+
+%pos = get(AINS_Simulator.figure, 'position');
+%if min(pos) &gt; 0
+%  default_settings.main_position = pos;
+%  dbg_disp(default_settings.main_position, doDebug, __FILE__, __LINE__);
+%else
+%  dbg_disp('position not saved', doDebug, __FILE__, __LINE__);
+%end
+
+% creat backup folder
+backup_folder = [param_project.project_path '/_backup'];
+if !isfolder(backup_folder)
+  mkdir backup_folder;
+  puts('created folder ');
+  disp(backup_folder);
+end
+
+% -----------------------------------------------------------------
+% Save in simple human readable format
+%
+% one of .a1 or .o1 would be sufficient -&gt; while developping use all
+%
+
+% a) Format .a1 -&gt; simple ascii format
+% 1a. set target folders - with versioning -&gt; data can be recovered
+source_folder = [param_project.project_path '/' param_project.active_folder];
+%source_file   = [source_folder '/' param_project.active_file];
+
+% construct .a1 file independent of active file name
+[dir, name, ext] = fileparts([source_folder '/' param_project.active_file]);
+source_filename = [name '.a1'];	
+source_file = [source_folder '/' source_filename];
+
+%target_bak = [backup_folder '/' source_filename '@' datestr(now(), 'ddmmyy-HHMM') '.bak'];
+target_bak = [backup_folder '/' source_filename '.bak'];
+
+if isfile(source_file)	% check if file exists -&gt; if not skip copying
+  % 2a. create backup
+  [status, msg, msgid] = my_copy(source_file, target_bak);
+end
+
+% 3a. create project data file
+if !isfolder(source_folder)
+  mkdir(source_folder)
+  puts('folder created: ')
+  disp(source_folder);
+end
+
+%fid = fopen(source_file, 'w');	
+%easy_save(fid, param_setup, '## simulation setup data', doDebug);	% setup
+%easy_save(fid, param_visual, '## visualisation data', doDebug);		% visual
+%easy_save(fid, depot, '## depot of materials', doDebug);		% visual
+%fclose(fid);
+
+source_filename = [name '.a2'];	
+source_file = [source_folder '/' source_filename];
+fid = fopen(source_file, 'w');	
+saveA2(fid, param_setup, '## simulation setup data', doDebug);	% setup
+saveA2(fid, param_visual, '## visualisation data', doDebug);		% visual
+saveA2(fid, depot, '## depot of materials', doDebug);		% visual
+fclose(fid);
+
+disp('...saved .a1 and .a2')
+
+clearvars source_folder source_filename source_file target_bak
+
+% -----------------------------------------------------------------
+% b) Format .o1 -&gt; octave ascii format
+% 
+% 1b. set target folders - with versioning -&gt; data can be recovered
+source_folder = [param_project.project_path '/' param_project.active_folder];
+%source_file   = [source_folder '/' param_project.active_file];
+
+% construct .o1 file independent of active file name
+[dir, name, ext] = fileparts([source_folder '/' param_project.active_file]);
+source_filename = [name '.o1'];	
+source_file = [source_folder '/' source_filename];
+
+%target_bak = [backup_folder '/' source_filename '@' datestr(now(), 'ddmmyy-HHMM') '.bak'];
+target_bak = [backup_folder '/' source_filename '.bak'];
+
+if isfile(source_file)	% check if file exists -&gt; if not skip copying
+  % 2b. create backup
+  [status, msg, msgid] = my_copy(source_file, target_bak);
+end
+
+%% 3b. create project data file
+%if !isfolder(source_folder)
+%  mkdir(source_folder)
+%  puts('folder created: ')
+%  disp(source_folder);
+%end
+
+save(           source_file, 'param_setup');		% setup
+save('-append', source_file, 'param_visual');		% visual
+save('-append', source_file, 'depot');
+
+disp('...saved .o1')
+
+clearvars source_folder source_filename source_file target_bak
+
+% -----------------------------------------------------------------
+% Save in simple human readable format - JSON
+%
+% one of .a1, .o1 or .j1 would be sufficient -&gt; while developping use both
+%
+
+% c) Format .a1 -&gt; simple ascii format
+% 1c. set target folders - with versioning -&gt; data can be recovered
+source_folder = [param_project.project_path '/' param_project.active_folder];
+%source_file   = [source_folder '/' param_project.active_file];
+
+% construct .a1 file independent of active file name
+[dir, name, ext] = fileparts([source_folder '/' param_project.active_file]);
+source_filename = [name '.j1'];	
+source_file = [source_folder '/' source_filename];
+
+%target_bak = [backup_folder '/' source_filename '@' datestr(now(), 'ddmmyy-HHMM') '.bak'];
+target_bak = [backup_folder '/' source_filename '.bak'];
+
+if isfile(source_file)	% check if file exists -&gt; if not skip copying
+  % 2c. create backup
+  [status, msg, msgid] = my_copy(source_file, target_bak);
+end
+
+% 3c. create project data file
+if !isfolder(source_folder)
+  mkdir(source_folder)
+  puts('folder created: ')
+  disp(source_folder);
+end
+
+p.param_setup = param_setup;
+p.param_visual = param_visual;
+p.depot = depot;
+
+fid = fopen(source_file, 'w');
+fdisp(fid, '## simulation setup data');
+fdisp(fid, jsonencode(p, 'PrettyPrint', true));
+%fdisp(fid, jsonencode(param_setup, 'PrettyPrint', true));	% setup
+%fdisp(fid, '## visualisation data');
+%fdisp(fid, jsonencode(param_visual, 'PrettyPrint', true));	% visual
+fclose(fid);
+
+source_filename = [name '.j2'];	
+source_file = [source_folder '/' source_filename];
+fid = fopen(source_file, 'w');	
+saveJ2(fid, param_setup, '## simulation setup data', doDebug);	% setup
+saveJ2(fid, param_visual, '## visualisation data', doDebug);		% visual
+saveJ2(fid, depot, '## depot of materials', doDebug);		% visual
+fclose(fid);
+
+
+disp('...saved .j1')
+
+clearvars source_folder source_filename source_file target_bak
+
+% -----------------------------------------------------------------
+% d) Format .pref -&gt; octave ascii format -&gt; used for local, machine specific and personal values
+% 4d. set target folders for preferences file
+source_file = [default_settings.startdir '/AinsSim.pref' ];
+target_bak  = [default_settings.startdir '/AinsSim.pref.bak'];			% no versioning, preferences are less importang
+
+if isfile(source_file)	% check if file exists -&gt; if not skip copying
+  % 5d. create backup
+  [status, msg, msgid] = my_copy(source_file, target_bak);
+end
+
+% 6d. create preferences file
+%fid = fopen(source_file, 'w');	
+%easy_save(fid, param_project, '## project stuff', doDebug);			% project settings: folders, files, 
+%easy_save(fid, default_settings, '## local defaults', doDebug);			% local data
+%fclose(fid);
+
+save(           source_file, 'param_project');
+save('-append', source_file, 'default_settings');
+%save -append AinsSim.pref param_project
+%save -append AinsSim.pref default_settings;
+
+disp('...saved')
+</uiControl>
+    <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="dialog-close-2.png" Name="b_close" Position="[15 568 326 53]" String="Close" TooltipString="" visible="on">% This code will be executed when user click the button control.
+
+disp b_close
+
+% end program
+close(AINS_Simulator.figure);
+</uiControl>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_y_min" Position="[370 570 90 22]" String="y_min" TooltipString="" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+global param_setup;
+global doDebug;
+
+param_setup.y_min = str2num(get(AINS_Simulator.ed_y_min, 'string'));
+dbg_disp(sprintf('y_min = %f\n', param_setup.y_min), doDebug, __FILE__, __LINE__);
+</uiControl>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_y_max" Position="[370 85 90 22]" String="y_max" TooltipString="" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+global param_setup;
+global doDebug;
+
+param_setup.y_max = str2num(get(AINS_Simulator.ed_y_max, 'string'));
+dbg_disp(sprintf('y_max = %f\n', param_setup.y_max), doDebug, __FILE__, __LINE__);
+</uiControl>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_x_min" Position="[570 594 90 22]" String="x_min" TooltipString="" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+global param_setup;
+global doDebug;
+
+param_setup.x_min = str2num(get(AINS_Simulator.ed_x_min, 'string'));
+dbg_disp(sprintf('x_min = %f\n', param_setup.x_min), doDebug, __FILE__, __LINE__);
+</uiControl>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_x_max" Position="[935 594 90 22]" String="x_max" TooltipString="" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+global param_setup;
+global doDebug;
+
+param_setup.x_max = str2num(get(AINS_Simulator.ed_x_max, 'string'))
+dbg_disp(sprintf('x_max = %f\n', param_setup.x_max), doDebug, __FILE__, __LINE__);
+</uiControl>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_3" Position="[370 65 75 19]" String="y_max [m]" TooltipString="" visible="on"/>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_4" Position="[370 550 72 19]" String="y_min [m]" TooltipString="" visible="on"/>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_5" Position="[495 597 70 19]" String="x_min [m]" TooltipString="" visible="on"/>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_6" Position="[855 597 73 19]" String="x_max [m]" TooltipString="" visible="on"/>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_title" Position="[91 135 129 22]" String="title" TooltipString="" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+global param_visual;
+global doDebug;
+
+param_visual.title = get(AINS_Simulator.ed_title, 'string');
+dbg_disp(sprintf('title = %s\n', param_visual.title), doDebug, __FILE__, __LINE__);
+
+if isfield(param_visual, 'show_title') &amp;&amp; param_visual.show_title
+  title(param_visual.title);
+end
+
+callBack_show_image_fcn([], [], AINS_Simulator);
+</uiControl>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_label_x" Position="[91 165 129 22]" String="label_x" TooltipString="" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+global param_visual;
+global doDebug;
+
+param_visual.xlabel = get(AINS_Simulator.ed_label_x, 'string');
+dbg_disp(sprintf('xlabel = %s\n', param_visual.xlabel), doDebug, __FILE__, __LINE__);
+
+if isfield(param_visual, 'show_xlabel') &amp;&amp; param_visual.show_xlabel
+  title (param_visual.xlabel);
+end
+
+callBack_show_image_fcn([], [], AINS_Simulator);
+</uiControl>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_label_y" Position="[91 195 129 22]" String="label_y" TooltipString="" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+global param_visual;
+global doDebug;
+
+param_visual.ylabel = get(AINS_Simulator.ed_label_y, 'string');
+dbg_disp(sprintf('ylabel = %s\n', param_visual.ylabel), doDebug, __FILE__, __LINE__);
+
+if isfield(param_visual, 'show_ylabel') &amp;&amp; param_visual.show_ylabel
+  title (param_visual.ylabel);
+end
+
+callBack_show_image_fcn([], [], AINS_Simulator);
+</uiControl>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_10" Position="[28 138 28 19]" String="Title" TooltipString="" visible="on"/>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_11" Position="[28 168 51 19]" String="Label x" TooltipString="" visible="on"/>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_12" Position="[28 198 53 19]" String="Label y" TooltipString="" visible="on"/>
+    <uiControl class="checkBoxCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="cb_title" Position="[246 134 22 23]" String="" TooltipString="" Value="deselect" visible="on">
+global param_visual;
+global doDebug;
+
+param_visual.show_title = get(AINS_Simulator.cb_title, 'Value');
+dbg_disp(sprintf('show_title = %i\n', param_visual.show_title), doDebug, __FILE__, __LINE__);
+
+
+if isfield(param_visual, 'show_title') &amp;&amp; isfield(param_visual, 'title_font_size') &amp;&amp; param_visual.show_title
+  title(param_visual.title, 'FontSize', param_visual.title_font_size);
+end
+
+callBack_show_image_fcn([], [], AINS_Simulator);
+</uiControl>
+    <uiControl class="checkBoxCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="cb_label_x" Position="[246 164 23 23]" String="" TooltipString="" Value="deselect" visible="on">
+global param_visual;
+global doDebug;
+
+param_visual.show_xlabel = get(AINS_Simulator.cb_label_x, 'Value');
+dbg_disp(sprintf('show_xlabel = %i\n', param_visual.show_xlabel), doDebug, __FILE__, __LINE__);
+
+if isfield(param_visual, 'show_xlabel') &amp;&amp; isfield(param_visual, 'label_font_size') &amp;&amp; param_visual.show_xlabel
+  xlabel(param_visual.xlabel, 'FontSize', param_visual.label_font_size);
+end
+
+callBack_show_image_fcn([], [], AINS_Simulator);
+</uiControl>
+    <uiControl class="checkBoxCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="cb_label_y" Position="[246 194 22 23]" String="" TooltipString="" Value="deselect" visible="on">
+global param_visual;
+global doDebug;
+
+param_visual.show_ylabel = get(AINS_Simulator.cb_label_y, 'Value');
+dbg_disp(sprintf('show_ylabel = %i\n', param_visual.show_ylabel), doDebug, __FILE__, __LINE__);
+
+if isfield(param_visual, 'show_ylabel') &amp;&amp; isfield(param_visual, 'label_font_size') &amp;&amp; param_visual.show_ylabel
+  ylabel(param_visual.ylabel, 'FontSize', param_visual.label_font_size);
+end
+
+callBack_show_image_fcn([], [], AINS_Simulator);
+</uiControl>
+    <uiControl class="cmbCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="cb_font_size_title" Position="[277 132 48 25]" String="14|5|6|7|8|9|10|11|12|16|18|20|22|24|28" TooltipString="set font size" visible="on">
+global param_setup;
+global param_visual;
+global doDebug;
+
+
+cMap = get(AINS_Simulator.cb_font_size_title, 'string');
+value = get(AINS_Simulator.cb_font_size_title, 'value');
+res = str2num(strsplit(cMap, '|'){value});
+dbg_disp(sprintf('set title font size %i\n', res), doDebug, __FILE__, __LINE__);
+
+%set(gca, 'fontsize', res);
+param_visual.title_font_size = res;
+
+if isfield(param_visual, 'show_title') &amp;&amp; param_visual.show_title
+  title(param_visual.title, 'FontSize', param_visual.title_font_size);
+end
+
+callBack_show_image_fcn([], [], AINS_Simulator);
+</uiControl>
+    <uiControl class="cmbCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="cb_font_size_label_x" Position="[277 162 48 25]" String="11|5|6|7|8|9|10|12|14|16|18|20|22|24|28" TooltipString="" visible="on">
+global param_setup;
+global param_visual;
+global doDebug;
+
+
+cMap = get(AINS_Simulator.cb_font_size_label_x, 'string');
+value = get(AINS_Simulator.cb_font_size_label_x, 'value');
+res = str2num(strsplit(cMap, '|'){value});
+dbg_disp(sprintf('set title font size %i\n', res), doDebug, __FILE__, __LINE__);
+
+param_visual.label_font_size = res;
+
+%set(gca, 'fontsize', param_visual.label_font_size);
+
+if isfield(param_visual, 'show_xlabel') &amp;&amp; param_visual.show_xlabel
+  xlabel(param_visual.xlabel, 'FontSize', param_visual.label_font_size);
+end
+if isfield(param_visual, 'show_ylabel') &amp;&amp; param_visual.show_ylabel
+  ylabel(param_visual.ylabel, 'FontSize', param_visual.label_font_size);
+end
+
+callBack_show_image_fcn([], [], AINS_Simulator);
+</uiControl>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_Cells" Position="[33 270 35 19]" String="Cells" TooltipString="" visible="on"/>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_Xmax" Position="[90 267 70 22]" String="Xmax" TooltipString="Xmax" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+global param_setup;
+global doDebug;
+
+param_setup.Xmax = str2num(get(AINS_Simulator.ed_Xmax, 'string'))
+dbg_disp(sprintf('Xmax = %f\n', param_setup.Xmax), doDebug, __FILE__, __LINE__);
+</uiControl>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_Ymax" Position="[175 267 70 22]" String="Ymax" TooltipString="Ymax" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+global param_setup;
+global doDebug;
+
+param_setup.Ymax = str2num(get(AINS_Simulator.ed_Ymax, 'string'))
+dbg_disp(sprintf('Ymax = %f\n', param_setup.Ymax), doDebug, __FILE__, __LINE__);
+</uiControl>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_121" Position="[163 270 7 19]" String="x" TooltipString="" visible="on"/>
+    <uiControl class="checkBoxCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="cb_show_colormap" Position="[405 515 72 23]" String="show" TooltipString="" Value="deselect" visible="on">global param_setup;
+global param_visual;
+
+param_visual.show_colormap = get(AINS_Simulator.cb_show_colormap, 'Value');
+
+if isfield(param_visual, 'show_colormap') &amp;&amp; param_visual.show_colormap
+  colorbar (gca);
+else
+  colorbar (gca, &quot;hide&quot;);
+end
+</uiControl>
+    <uiControl class="checkBoxCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="cb_grid" Position="[285 435 119 23]" String="grid" TooltipString="" Value="deselect" visible="on">global param_setup;
+global param_visual;
+
+param_visual.show_grid = get(AINS_Simulator.cb_grid, 'Value');
+
+if param_visual.show_grid
+  grid('on');
+else
+  grid('off');
+end
+</uiControl>
+    <uiControl class="checkBoxCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="cb_trajectories" Position="[285 460 119 23]" String="trajectories" TooltipString="" Value="deselect" visible="on">global param_setup;
+global param_visual;
+
+param_visual.show_traj = get(AINS_Simulator.cb_trajectories, 'Value');
+callBack_show_image_fcn([], [], AINS_Simulator);
+</uiControl>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_calls" Position="[165 340 70 22]" String="Edit_15" TooltipString="number of simulation runs" visible="off">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+global param_setup;
+
+param_setup.calls = str2num(get(AINS_Simulator.ed_calls, 'string'));
+</uiControl>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_13" Position="[33 343 37 19]" String="Runs" TooltipString="" visible="on"/>
+    <uiControl class="checkBoxCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="cb_use_cc" Position="[170 305 119 23]" String="use cc" TooltipString="" Value="deselect" visible="off">
+global param_setup;
+
+param_setup.use_engine_cc = get(AINS_Simulator.cb_use_cc, 'Value');</uiControl>
+    <uiControl class="callBackCtrl" Arguments="AINS_Simulator" functionName="callBack_populate_figure_fcn" Name="callBack_populate_figure" Position="[180 190 52 52]">% This code can define a callback.
+% You must associate them to figure or control onload like event window
+
+global param_setup;
+global param_visual;
+
+if (~isfield(param_setup, 'x_min'))
+  disp('error - maybe no file loaded');
+  return;
+end
+
+set(AINS_Simulator.ed_x_min, 'string', num2str(param_setup.x_min));
+set(AINS_Simulator.ed_y_min, 'string', num2str(param_setup.y_min));
+set(AINS_Simulator.ed_x_max, 'string', num2str(param_setup.x_max));
+set(AINS_Simulator.ed_y_max, 'string', num2str(param_setup.y_max));
+
+set(AINS_Simulator.ed_Xmax, 'string', num2str(param_setup.Xmax));
+set(AINS_Simulator.ed_Ymax, 'string', num2str(param_setup.Ymax));
+
+set(AINS_Simulator.ed_title, 'string', param_visual.title);
+set(AINS_Simulator.ed_label_x, 'string', param_visual.xlabel);
+set(AINS_Simulator.ed_label_y, 'string', param_visual.ylabel);
+
+set(AINS_Simulator.cb_title, 'Value', logical(param_visual.show_title));
+set(AINS_Simulator.cb_label_x, 'Value', logical(param_visual.show_xlabel));
+set(AINS_Simulator.cb_label_y, 'Value', logical(param_visual.show_ylabel));
+
+set(AINS_Simulator.cb_show_density, 'Value', logical(param_visual.show_density));
+set(AINS_Simulator.cb_show_colormap, 'Value', logical(param_visual.show_colormap));
+set(AINS_Simulator.cb_grid, 'Value', logical(param_visual.show_grid));
+set(AINS_Simulator.cb_trajectories, 'Value', logical(param_visual.show_traj));
+set(AINS_Simulator.ed_num_traj, 'string', num2str(param_visual.num_traj));
+set(AINS_Simulator.ed_traj_tuning, 'string', num2str(param_visual.traj_tuning));
+set(AINS_Simulator.cb_show_real_area, 'Value', logical(param_visual.show_real_area));
+
+set(AINS_Simulator.ed_calls, 'string', num2str(param_setup.calls));
+set(AINS_Simulator.cb_use_cc, 'Value', logical(param_setup.use_engine_cc));
+set(AINS_Simulator.ed_runs_per_call, 'string', num2str(param_setup.engine_runs_per_call));
+
+set(AINS_Simulator.ed_lambda, 'string', num2str(param_setup.lambda));
+set(AINS_Simulator.cb_coherent, 'Value', logical(param_setup.coherent));
+set(AINS_Simulator.cb_show_sources, 'Value', logical(param_visual.show_sources));
+set(AINS_Simulator.cb_show_materials, 'Value', logical(param_visual.show_materials));
+
+
+cMap = get(AINS_Simulator.cb_colormap, 'string');
+res = strsplit(cMap, '|');
+for m = 1:size(res,2)
+  if strcmp(res(m){1}, param_setup.colormap)
+    set(AINS_Simulator.cb_colormap, 'Value', m);
+    break;
+  end
+end
+
+cMap = get(AINS_Simulator.cb_solver, 'string');
+res = strsplit(cMap, '|');
+for m = 1:size(res,2)
+  if strcmp(res(m){1}, param_setup.active_solver)
+    set(AINS_Simulator.cb_solver, 'Value', m);
+    break;
+  end
+end
+
+cMap = get(AINS_Simulator.cb_particle, 'string');
+res = strsplit(cMap, '|');
+for m = 1:size(res,2)
+  if strcmp(res(m){1}, param_setup.particle)
+    set(AINS_Simulator.cb_particle, 'Value', m);
+    break;
+  end
+end
+
+cMap = get(AINS_Simulator.cb_fontname, 'string');
+res = strsplit(cMap, '|');
+for m = 1:size(res,2)
+  if strcmp(res(m){1}, param_visual.fontname)
+    set(AINS_Simulator.cb_fontname, 'Value', m);
+    break;
+  end
+end
+
+
+</uiControl>
+    <uiControl class="callBackCtrl" Arguments="AINS_Simulator" functionName="callBack_show_image_fcn" Name="callBack_show_image" Position="[505 45 52 52]">% This code can define a callback.
+% You must associate them to figure or control onload like event window
+
+global default_settings;
+global local_settings;
+global param_project;
+global param_setup;
+global param_visual;
+global doDebug;
+global domains;
+global P;
+
+
+%cla
+axis(AINS_Simulator.Image_1);
+
+%
+% show image if P is available
+%
+resultAvailable = true;
+
+if size(find(P), 1) &lt; 10
+  %disp('P -&gt; to few points...');
+  %set(gca, 'fontsize', param_visual.label_font_size);
+  resultAvailable = false;
+  %return
+end
+
+
+% show density
+if resultAvailable &amp;&amp; param_visual.show_density
+  hold off
+  %clf
+  imagesc(gca, P'); %, [0:0.15:1]);
+%  imagesc(AINS_Simulator.Image_1, P'); %, [0:0.15:1]);
+  axis(gca, 'xy');
+%  axis(AINS_Simulator.Image_1, 'xy');
+end
+
+
+if (~isfield(param_visual, 'show_materials'))
+  disp('error - maybe no file loaded');
+  return;
+end
+
+
+% show materials independently of results
+if param_visual.show_materials &amp;&amp; rows(param_setup.materials) &gt; 0
+
+  if param_visual.show_density 
+    hold on
+  else
+    hold off
+  end
+  
+  transformedRect = transformMatSrcD2(param_setup.materials,...
+                                      domains.DOM,...
+                                      [1 1 param_setup.Xmax param_setup.Ymax]);
+  
+  for m = 1:size(transformedRect, 1)
+    m1 = transformedRect(m, 1:4);
+    m2 = zeros(size(m1));
+    m2(1) = m1(1);
+    m2(2) = m1(2);
+    m2(4) = m1(4) - m1(2);
+    m2(3) = m1(3) - m1(1);
+    rectangle('Position', m2', 'EdgeColor', 'y');
+  end
+  
+end
+
+
+if rows(param_setup.sources) &gt; 0
+
+  if param_visual.show_density 
+    hold on
+  else
+    hold off
+  end
+ 
+  sources = transformMatSrcD2(param_setup.sources,...    
+                        domains.DOM,...
+                        [1 1 param_setup.Xmax param_setup.Ymax]);
+
+  X_max = param_setup.Xmax;
+  Y_max = param_setup.Ymax;
+
+  if param_visual.show_sources 
+    for m = 1:size(sources, 1)
+      m1 = sources(m, 1:4);
+      m2 = zeros(size(m1));
+      m2(1) = m1(1);
+      m2(2) = m1(2);
+      m2(4) = m1(4) - m1(2);
+      m2(3) = m1(3) - m1(1);
+
+      rectangle (gca, 'Position', m2', 'EdgeColor', 'g');				% it's a source
+      midpt_x = (m1(3)+m1(1))/2;
+      delta_x = midpt_x + 0.5*X_max*cosd(param_setup.sources(m, domains.ROT));
+      delta_y = m2(2)   + 0.5*Y_max*sind(param_setup.sources(m, domains.ROT));
+      line (gca, 'xdata', [midpt_x delta_x], 'ydata', [m2(2) delta_y], 'color', 'g', 'linewidth', 1);
+    end
+  end  
+  
+  pos1 = sources(1, domains.X_MIN) + (sources(1, domains.X_MAX) - sources(1, domains.X_MIN))/2;  % midpoint
+  showtraj1 = 1;
+  if rows(param_setup.sources) &gt; 1
+    showtraj2 = 1;
+    pos2 = sources(2, domains.X_MIN) + (sources(2, domains.X_MAX) - sources(2, domains.X_MIN))/2;  % midpoint 
+  else
+    showtraj2 = 0;
+    pos2 = 0;
+  end
+  %setup.sigma_g = 0.001;
+  sigma_g1 = 1; %setup.sigma_g;
+  sigma_g2 = 1; %setup.sigma_g;
+  traj_tuning = param_visual.traj_tuning;
+  num_traj = param_visual.num_traj;
+
+else
+  showtraj1 = 0
+end
+
+
+
+
+%% I've forgotten what these have been...
+opening = 0;
+
+if resultAvailable &amp;&amp; param_visual.show_traj &amp;&amp; showtraj1 %showtraj21 || showtraj2
+  
+  disp('...show trajectories');
+
+  c = cumsum(P, 1);           # sum up P's rows
+  c_max = c(end, 1);
+  c = c/c_max;  ## normalize
+  c_max = 1;    ## keep c_max which is 1 due to normalizing
+  for k = 2:size(c,2)
+    c(:,k) = c(:,k) + (c_max - c(end,k))/2;    # add cut-off part
+  end
+  
+  % define relative initial position vectors
+  if opening == 0
+    start_factor = 1;
+  else
+    start_factor = 0.9*opening;
+  end
+  
+  if 0 &amp;&amp; param_visual.show_flux	######## TODO
+    % calculate values of equal flux
+    nz = [];
+    if showtraj1
+      val_min = pos1 + start_factor*sigma_g1*traj_tuning(1);
+      if val_min &gt; 0
+        val_min = c(fix(val_min));
+      else
+        val_min = eps;
+      end
+      val_max = pos1 + start_factor*sigma_g1*traj_tuning(2);
+      if val_max &gt; 0
+        val_max = c(fix(val_max));
+      else
+        val_max = c_max;
+      end
+      nz = linspace(val_min, val_max, num_traj);
+    end
+    if showtraj2
+      val_min = pos2 + start_factor*sigma_g2*traj_tuning(1);
+      if val_min &gt; 0
+        val_min = c(fix(val_min));
+      else
+        val_min = eps;
+      end
+      val_max = pos2 + start_factor*sigma_g2*traj_tuning(2);
+      if val_max &gt; 0
+        val_max = c(fix(val_max));
+      else
+        val_max = c_max;
+      end
+      nz = [nz, linspace(val_min, val_max, num_traj)];
+    end
+  else
+    % calculate values of equal distance
+    startpos = [];
+    if showtraj1
+      startpos = [pos1 + start_factor*sigma_g1*linspace(traj_tuning(1), traj_tuning(2), num_traj)];
+    end
+    if showtraj2
+      startpos = [startpos, pos2 + start_factor*sigma_g2*linspace(traj_tuning(1), traj_tuning(2), num_traj)];
+    end
+    
+    nz = [];
+    for k = 1:size(startpos,2)
+      x_value = floor(startpos(k));
+      if  x_value &gt; 0 &amp;&amp; x_value &lt;= X_max
+        nz = [nz, c(x_value, 1)];
+      end
+    end
+  end
+
+  %x = [1:X_max]';
+  %t = [1:Y_max];
+
+  if (~param_visual.show_density)
+    hold off
+  else
+    hold on
+  end
+  hg = hggroup();
+  [~, hg] = contour(c', nz, 'r');  # display numerical simulation's result
+  hold on
+  set (hg, 'linewidth', param_visual.traj_linewidth);
+  %    contour(t,x,real(c),nz)  # display numerical simulation's result
+end
+
+
+% show image using all selected parameters
+
+
+
+if isfield(param_visual, 'show_title') &amp;&amp; param_visual.show_title
+  title(param_visual.title, 'FontSize', param_visual.title_font_size);
+end
+
+if isfield(param_visual, 'show_xlabel') &amp;&amp; param_visual.show_xlabel
+  xlabel(param_visual.xlabel, 'FontSize', param_visual.label_font_size);
+end
+
+if isfield(param_visual, 'show_ylabel') &amp;&amp; param_visual.show_ylabel
+  ylabel(param_visual.ylabel, 'FontSize', param_visual.label_font_size);
+end
+
+if isfield(param_visual, 'show_colormap') &amp;&amp; param_visual.show_colormap
+  colorbar (gca);
+else
+  colorbar (gca, &quot;hide&quot;);
+end
+
+if param_visual.show_grid
+  grid('on');
+else
+  grid('off');
+end
+
+set(gca, 'fontsize', param_visual.label_font_size);
+set(gca, 'fontname', param_visual.fontname);
+if param_visual.show_real_area
+  axis ([param_setup.x_min, param_setup.x_max, param_setup.y_min, param_setup.y_max], &quot;square&quot;);
+else
+  axis ([0, param_setup.Xmax, 0, param_setup.Ymax], &quot;square&quot;);
+end
+
+</uiControl>
+    <uiControl class="cmbCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="cb_particle" Position="[33 385 122 25]" String="electron|neutron|photon" TooltipString="" visible="on">% The code added here will be executed when an item is selected from
+% the list (even if the same value is selected that was already set)
+
+global param_setup;
+global param_visual;
+global doDebug;
+
+
+cMap = get(AINS_Simulator.cb_particle, 'string');
+value = get(AINS_Simulator.cb_particle, 'value');
+res = strsplit(cMap, '|'){value};
+dbg_disp(sprintf('set particle %s\n', res), doDebug, __FILE__, __LINE__);
+
+param_setup.particle = res;
+</uiControl>
+    <uiControl class="checkBoxCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="cb_show_materials" Position="[185 530 89 23]" String="mat" TooltipString="show  materials" Value="deselect" visible="on">
+global param_setup;
+global param_visual;
+
+param_visual.show_materials = get(AINS_Simulator.cb_show_materials, 'Value');
+
+callBack_show_image_fcn([], [], AINS_Simulator);
+</uiControl>
+    <uiControl class="checkBoxCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="cb_show_sources" Position="[185 505 86 23]" String="src" TooltipString="show sources" Value="deselect" visible="on">
+global param_setup;
+global param_visual;
+
+param_visual.show_sources = get(AINS_Simulator.cb_show_sources, 'Value');
+
+if param_visual.show_sources
+  callBack_show_image_fcn([], [], AINS_Simulator);
+end
+</uiControl>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_lambda" Position="[85 420 90 22]" String="Edit_18" TooltipString="wavelength in meters" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+global param_setup;
+
+param_setup.lambda = str2num(get(AINS_Simulator.ed_lambda, 'string'));
+</uiControl>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_14" Position="[33 420 37 19]" String="λ [m]" TooltipString="" visible="on"/>
+    <uiControl class="checkBoxCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="cb_show_density" Position="[285 410 128 23]" String="density" TooltipString="density" Value="deselect" visible="on">global param_setup;
+global param_visual;
+
+param_visual.show_density = get(AINS_Simulator.cb_show_density, 'Value');
+
+callBack_show_image_fcn([], [], AINS_Simulator);
+</uiControl>
+    <uiControl class="checkBoxCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="cb_coherent" Position="[33 445 127 23]" String="coherent" TooltipString="" Value="deselect" visible="on">
+global param_setup;
+
+param_setup.coherent = get(AINS_Simulator.cb_coherent, 'Value');
+</uiControl>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_runs_per_call" Position="[75 340 70 22]" String="Edit_19" TooltipString="number of runs (try 100000)" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+global param_setup;
+
+param_setup.engine_runs_per_call = str2num(get(AINS_Simulator.ed_runs_per_call, 'string'));
+</uiControl>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_15" Position="[153 343 7 19]" String="x" TooltipString="" visible="off"/>
+    <uiControl class="checkBoxCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="cb_show_real_area" Position="[685 593 128 23]" String="show real area" TooltipString="" Value="deselect" visible="off">global param_setup;
+global param_visual;
+
+param_visual.show_real_area = get(AINS_Simulator.cb_show_real_area, 'Value');
+callBack_show_image_fcn([], [], AINS_Simulator);
+</uiControl>
+    <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="" Name="cb_save_position" Position="[354 365 69 26]" String="position" TooltipString="" visible="on">% This code will be executed when user click the button control.
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallback' from the properties editor
+
+global default_settings;
+global doDebug;
+
+pos = get(AINS_Simulator.figure, 'position');
+if min(pos) &gt; 0
+  default_settings.main_position = pos;
+  dbg_disp(default_settings.main_position, doDebug, __FILE__, __LINE__);
+  AINS_Simulator_b_save_doIt([], [], AINS_Simulator);
+else
+  dbg_disp('position not saved', doDebug, __FILE__, __LINE__);
+end
+</uiControl>
+    <uiControl class="cmbCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="cb_fontname" Position="[275 195 51 25]" String="Arial|Times|Times-Roman" TooltipString="" visible="on">
+global param_setup;
+global param_visual;
+global doDebug;
+
+
+cMap = get(AINS_Simulator.cb_fontname, 'string');
+value = get(AINS_Simulator.cb_fontname, 'value');
+res = strsplit(cMap, '|'){value};
+dbg_disp(sprintf('set fontname %s\n', res), doDebug, __FILE__, __LINE__);
+
+%set(gca, 'fontsize', res);
+param_visual.fontname = res;
+
+if isfield(param_visual, 'show_title') &amp;&amp; param_visual.show_title
+  set(gca, 'fontname', param_visual.fontname);
+end
+
+callBack_show_image_fcn([], [], AINS_Simulator);
+</uiControl>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="center" Name="ed_traj_tuning" Position="[380 485 55 22]" String="Edit_22" TooltipString="trajectory tuning" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+global param_setup;
+global param_visual;
+global doDebug;
+
+param_visual.traj_tuning = str2num(get(AINS_Simulator.ed_traj_tuning, 'string'));
+dbg_disp(sprintf('traj_tuning = %i %i\n', param_visual.traj_tuning), doDebug, __FILE__, __LINE__);
+
+callBack_show_image_fcn([], [], AINS_Simulator);
+</uiControl>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_30" Position="[285 488 76 19]" String="traj. tuning" TooltipString="" visible="on"/>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="center" Name="ed_num_traj" Position="[380 460 55 22]" String="Edit_23" TooltipString="" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+global param_setup;
+global param_visual;
+global doDebug;
+
+param_visual.num_traj = str2num(get(AINS_Simulator.ed_num_traj, 'string'));
+dbg_disp(sprintf('num_traj = %i %i\n', param_visual.num_traj), doDebug, __FILE__, __LINE__);
+
+callBack_show_image_fcn([], [], AINS_Simulator);
+</uiControl>
+    <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="edit-find-3.png" Name="b_find" Position="[355 220 69 26]" String="" TooltipString="" visible="on">% This code will be executed when user click the button control.
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallback' from the properties editor
+
+figure(11)
+set(gca, 'LooseInset', [0 0 0 0]);
+
+callBack_show_image_fcn([], [], AINS_Simulator);
+</uiControl>
+</dialog>

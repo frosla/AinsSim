@@ -1,0 +1,873 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dialog Color="[0.941 0.941 0.941]" HPosition="center" Name="AINS_project" Position="[0 596 890 484]" Resize="off" VPosition="center" windowStyle="normal">
+    <GlobalSrc>%
+% The source code written here will be executed when
+% windows load. Works like 'onLoad' event of other languages.
+%
+
+global param_project;
+global current_tree;
+global default_settings;
+global local_settings;
+
+
+local_settings.icon_dialog_ok = get(AINS_project.b_open,'cdata');
+local_settings.icon_dialog_no = get(AINS_project.b_create,'cdata');
+
+set(AINS_project.figure, 'numbertitle', 'off');
+set(AINS_project.figure, 'name', 'Project Manager');
+
+
+% change into project directory
+cd(param_project.project_path);
+
+%axis(AINS_project.Image_2);
+axis off;
+
+set(AINS_project.ed_project_path,  'string', param_project.project_path);
+set(AINS_project.ed_active_folder, 'string', param_project.active_folder);
+set(AINS_project.ed_active_file,   'string', param_project.active_file);
+
+[files, err, msg] = readdir(param_project.project_path);
+if err != 0
+  disp(msg);
+  return;
+end
+
+callBack_read_dir_tree_fcn();
+
+count = size(current_tree, 2);
+
+set(AINS_project.Slider_1, 'Min', 1);
+set(AINS_project.Slider_1, 'Max', count);
+set(AINS_project.Slider_1, 'Value', 1);
+if (count &gt; 1)
+  stepsize = 1/(count-1);
+else
+  stepsize = 1;
+end
+set(AINS_project.Slider_1, 'Sliderstep', [stepsize 0.1]);
+
+% preset new folder and new file
+newFolderString = ['projects_' datestr(date(), 'mmmyyyy')];
+newFileString = ['setup_' datestr(now(), 'dd-mmm_HH-MM') local_settings.default_fileext];
+set(AINS_project.ed_new_folder, 'string', newFolderString);
+set(AINS_project.ed_new_file,   'string', newFileString);
+
+AINS_project_ed_active_file_doIt([], [], AINS_project);
+AINS_project_ed_new_file_doIt([], [], AINS_project);
+
+set(AINS_project.figure, 'closerequestfcn', {@callBack_close_dlg_fcn, AINS_project});
+
+% set default
+dlgAinsProjectStatus = 'cancelled';
+
+refresh();
+
+%ret = AINS_project;
+%return;   % cheat for dlg: ret = ...; afterwards being ignored
+
+
+
+
+
+
+</GlobalSrc>
+    <uiControl class="imgCtrl" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" Name="Image_2" Position="[25 75 256 256]" visible="on"/>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="18" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="center" isAutoSize="true" Name="Label_title" Position="[334 20 207 35]" String="Manage Project" TooltipString="" visible="on">% In favor of generality, the possibility of adding a default callback
+% to a text control has been included. But you should note that this
+% control has no possibility to interact with the user.
+% This is why, unless you know exactly what you want to do, you may not
+% need to do anything here.</uiControl>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" Name="ed_project_path" Position="[441 75 411 22]" String="...HOME..." TooltipString="" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key</uiControl>
+    <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="" Name="b_project_path" Position="[308 75 125 22]" String="Project path" TooltipString="" visible="on">% This code will be executed when user click the button control.
+
+global param_project;
+
+pp = uigetdir(param_project.project_path, 'Choose HOME directory')
+
+if isfolder(pp)
+  param_project.project_path = pp;
+  set(AINS_project.ed_project_path, 'string', param_project.project_path);
+else
+  disp(sprintf('%s not found', pp))
+end
+</uiControl>
+    <uiControl class="sliderCtrl" BackgroundColor="[0.941 0.941 0.941]" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Max="99" Min="0" Name="Slider_1" Position="[311 200 541 22]" TooltipString="" Value="0" visible="on">% This code will be executed when user change the value of slider.
+
+global param_project;
+global current_tree;
+global default_settings;
+
+%disp('-&gt; SLIDER')
+
+current_dir = pwd();
+
+count = size(current_tree, 2);
+
+Min = get(AINS_project.Slider_1, 'Min');
+val = fix(get(AINS_project.Slider_1, 'Value'));
+Max = get(AINS_project.Slider_1, 'Max');
+
+if val &lt; Min
+  disp(sprintf('value exceeded: %i &lt; %i ! &lt; %i', Min, val, Max))
+  val = Min;
+elseif val &gt; Max
+  disp(sprintf('value exceeded: %i &lt; %i ! &lt; %i', Min, val, Max))
+  val = Max;
+end
+
+% usual case: set slider on number val's item
+folder = current_tree(1, val){1};
+file   = current_tree(2, val){1};
+pic    = current_tree(3, val){1};
+
+set(AINS_project.ed_active_folder, 'string', folder);
+set(AINS_project.ed_active_file,   'string', file);
+
+imshow(pic)
+
+</uiControl>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_active_folder" Position="[429 120 299 22]" String="Edit_2" TooltipString="" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+
+global param_project;
+global default_settings;
+global local_settings;
+
+% check if entries allow for opening the project
+activeFolder = get(AINS_project.ed_active_folder, 'string');
+activeFile = get(AINS_project.ed_active_file, 'string');
+
+if isfolder(activeFolder) &amp;&amp; isfile([activeFolder '/' activeFile])
+  % folder and file in folder exist -&gt; indicate ok
+  set(AINS_project.b_open, 'cdata', local_settings.icon_dialog_ok);
+else
+  set(AINS_project.b_open, 'cdata', local_settings.icon_dialog_no);
+end
+
+% maintain logo on 'create' button
+AINS_project_t_new_project_doIt([], [], AINS_project);
+</uiControl>
+    <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="" Name="b_active_folder" Position="[308 120 110 22]" String="Active folder" TooltipString="" visible="on">% This code will be executed when user click the button control.
+
+global param_project;
+
+% use entry of line edit because param_project will be set on 'open' or 'create'
+%actFolder = get(AINS_project.ed_active_folder, 'string');
+
+%if iscell(actFolder)
+%  folder = actFolder{1};
+%else
+%  folder = actFolder;
+%end
+
+%if ~isfolder(folder)
+%  folder = param_project.project_path;
+%end
+
+pp = uigetdir(param_project.project_path, 'Choose project directory');
+
+if (pp != 0) &amp;&amp; isfolder(pp)
+  [dir, name, ext] = fileparts(pp);
+  %param_project.active_folder = name;
+  set(AINS_project.ed_active_folder, 'string', name);
+elseif (pp != 0)
+  disp(sprintf('%s not found', pp))
+end
+</uiControl>
+    <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="" Name="b_active_file" Position="[308 160 110 22]" String="Active file" TooltipString="" visible="on">% This code will be executed when user click the button control.
+
+global param_project;
+global current_tree;
+global default_settings;
+global local_settings;
+
+%disp('-&gt; b_active_file')
+
+% use entries of line edit because param_project will be set on 'open' or 'create'
+actFolder = get(AINS_project.ed_active_folder, 'string');
+if iscell(actFolder)
+  folder = actFolder{1};
+else
+  folder = actFolder;
+end
+
+%pwd()
+%folder
+if ~isfolder(folder)
+  folder = param_project.project_path;
+end
+
+actFile = get(AINS_project.ed_active_file, 'string');
+if iscell(actFile)
+  file = actFile{1};
+else
+  file = actFile;
+end
+
+[fname, fpath, fltidx] = uigetfile(local_settings.flt_fileext, 'Choose current file', [folder '/' file]);
+
+if fname == 0
+  % cancel pressed
+  return;
+end
+
+if length(fpath) &gt; length(param_project.project_path)
+  path = substr (fpath, length(param_project.project_path)+2);
+  if endsWith(path, '\')
+    path = strtrunc(path, length(path)-1);
+  end
+end
+
+if (fname != 0) &amp;&amp; isfile([path '/' fname])
+  %param_project.active_file = pp;
+  set(AINS_project.ed_active_file, 'string', fname);
+%  [dir, name, ext] = fileparts(pp);
+elseif (fname != 0)
+  disp(sprintf('%s not found', fname))
+  return;
+end
+
+if length(path) &gt; 0 &amp;&amp; !strcmp(actFolder, path)
+  set(AINS_project.ed_active_folder, 'string', path)
+end
+
+count = size(current_tree, 2);
+
+%path
+%fname
+for m = 1:count
+  if strcmp(current_tree(1, m), path) &amp;&amp; strcmp(current_tree(2, m), fname)
+    pic = current_tree(3, m){1};
+    disp('b_active_file - found val: ')
+    disp(m)
+    set(AINS_project.Slider_1, 'Value', m);
+    AINS_project_Slider_1_doIt([], [], AINS_project);
+    break;
+  end
+end
+</uiControl>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_active_file" Position="[429 160 299 22]" String="Edit_3" TooltipString="" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+
+global param_project;
+global current_tree;
+global default_settings;
+global local_settings;
+
+%current_dir = pwd();
+
+%disp('SLIDER - value:')
+%disp(src)
+%disp(data)
+
+count = size(current_tree, 2);
+
+Min = get(AINS_project.Slider_1, 'Min');
+val = fix(get(AINS_project.Slider_1, 'Value'));
+Max = get(AINS_project.Slider_1, 'Max');
+
+if val &lt; Min
+  disp(sprintf('value exceeded: %i &lt; %i ! &lt; %i', Min, val, Max))
+  val = Min;
+elseif val &gt; Max
+  disp(sprintf('value exceeded: %i &lt; %i ! &lt; %i', Min, val, Max))
+  val = Max;
+end
+
+if val &gt; 0 
+  % active file just set: find correct slider position
+ 
+  if (isfield(default_settings, 'default_icon'))
+    pic = default_settings.default_icon;	% if no picture present use default replacement
+  else
+    pic = local_settings.default_icon;	% if no picture present use default replacement
+  end
+  
+  % use entries of line edit because param_project will be set on 'open' or 'create'
+  actFolder = get(AINS_project.ed_active_folder, 'string');
+  if iscell(actFolder)
+    folder = actFolder{1};
+  else
+    folder = actFolder;
+  end
+  if ~isfolder(folder)
+    count = 0;	% active folder not found...
+  end
+
+  if count &gt; 0
+    %cd(param_project.project_path);
+    %cd(folder);
+
+    actFile = get(AINS_project.ed_active_file, 'string');
+    if iscell(actFile)
+      file = actFile{1};
+    else
+      file = actFile;
+    end
+    if ~isfile([folder '/' file])
+      count = 0;	% active file not found...
+%    else
+%      [dir, name, ext] = fileparts(file);
+    end
+  end
+
+  for m = 1:count
+    if strcmp(current_tree(1, m), folder) &amp;&amp; strcmp(current_tree(2, m), file)
+      pic = current_tree(3, m){1};
+      disp('ed_active_file - found pic:')
+      disp(pic)
+      set(AINS_project.Slider_1, 'Value', m);
+      break;
+    end
+  end
+
+  %cd(current_dir);
+end
+
+imshow(pic)
+
+
+% check if entries allow for opening the project
+activeFolder = get(AINS_project.ed_active_folder, 'string');
+activeFile = get(AINS_project.ed_active_file, 'string');
+
+if isfolder(activeFolder) &amp;&amp; isfile([activeFolder '/' activeFile])
+  % folder and file in folder exist -&gt; indicate ok
+  set(AINS_project.b_open, 'cdata', local_settings.icon_dialog_ok);
+else
+  set(AINS_project.b_open, 'cdata', local_settings.icon_dialog_no);
+end
+
+% maintain logo on 'create' button
+AINS_project_t_new_project_doIt([], [], AINS_project);
+</uiControl>
+    <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="dialog-ok-2.png" Name="b_open" Position="[749 119 103 64]" String="Open" TooltipString="" visible="on">% This code will be executed when user click the button control.
+
+global param_project;
+global dlgAinsProjectStatus;
+global local_settings;
+
+% checkStatus = 1;
+
+% remember of folder
+%current_folder = pwd();
+%cd(param_project.project_path)
+
+pp = get(AINS_project.ed_active_folder, 'string');
+if iscell(pp)
+  pp = pp{1};
+end
+if isfolder(pp)
+  param_project.active_folder = pp;
+else
+  disp(sprintf('%s not found', pp))
+  checkStatus = 0;
+  return;
+end
+
+%if checkStatus == 1
+
+  %cd(pp)
+
+  file = get(AINS_project.ed_active_file, 'string');
+  if isfile([pp '/' file])
+    param_project.active_file = file;
+  else
+    disp(sprintf('%s not found', file))
+    checkStatus = 0;
+    return;
+  end
+%end
+
+%cd(current_folder);	% reset folder
+
+%if checkStatus == 1
+  dlgAinsProjectStatus = 'open';
+%end
+close(AINS_project.figure);
+</uiControl>
+    <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="" Name="b_update_thumbnails" Position="[25 355 256 52]" String="Update thumbs" TooltipString="" visible="on">% This code will be executed when user click the button control.
+
+global param_project;
+global default_settings;
+global local_settings;
+global current_tree;
+global doDebug;
+
+dbg_disp('update thumbnails', doDebug);
+
+## recursive readdir...
+##
+## param_project.project_path -&gt;          ...\project_home
+## param_project.active_folder -&gt;         ...\project_home\project1                (current: foldername)
+## param_project.active_file -&gt;           ...\project_home\project1\myfile.ains    (current: filename)
+## default_settings.default_icon_path -&gt;  ...\project_home\_icons
+
+[folder, err, msg] = readdir(param_project.project_path);
+if err != 0
+  disp(msg);
+  return;
+end
+
+
+for k = 1:size(folder,1)
+  foldername = [param_project.project_path '\' folder(k,1){1}];
+  if ~isfolder(foldername) || strcmp(folder(k,1){1}, '.') || strcmp(folder(k,1){1}, '..') || strcmp(folder(k,1){1}, '_icons')
+    %disp(sprintf('-&gt; not a folder: %s', foldername))
+    continue;
+  end
+  
+  if 0
+    % use EzThumbs
+    EzThumbs = [param_project.project_path '\..\thirdparty\EzThumbs.exe'];
+    system(sprintf('%s &quot;%s\\*.png&quot; /D=&quot;%s&quot; /P=&quot;tn_%s_&quot; /W=256 /H=256 /Z=ShrinkToFit',...
+	EzThumbs,...
+	foldername,...
+	default_settings.default_icon_path,...
+	folder(k,1){1}));
+    dbg_disp(sprintf('%s &quot;%s\\*.png&quot; /D=&quot;%s&quot; /P=&quot;tn_%s_&quot; /W=256 /H=256 /Z=ShrinkToFit',...
+	EzThumbs,...
+	foldername,...
+	default_settings.default_icon_path,...
+		folder(k,1){1}), doDebug);
+  else
+    dbg_disp(sprintf('check folder for pictures: %s', foldername), doDebug, __FILE__, __LINE__);
+    files = glob([foldername '/*' local_settings.default_fileext])
+    
+    for m = 1:size(files,1)
+      [dir, name, ext] = fileparts(files(m,1){1});	% e.g. projects_Oct2024\testfig.ain
+disp(dir)
+disp(name)
+disp(ext)
+      picFile = [dir '/' name '.png'];	                 % e.g. projects_Oct2024\testfig.png -&gt; png is fixed format for preview
+%      pngFile = [foldername '/' '.png'];
+      dbg_disp(sprintf('...check picture: %s', picFile), doDebug, __FILE__, __LINE__);
+      
+      if isfile(picFile)
+        dbg_disp(sprintf('...found picture: %s', picFile), doDebug, __FILE__, __LINE__);
+        RGB = imread(picFile);
+        imwrite(imresize(RGB, [256 256]), [default_settings.default_icon_path '/tn_' folder(k,1){1} '_' name '.png']);   % preview file
+      end
+    end
+    
+  end
+end
+
+val = fix(get(AINS_project.Slider_1, 'Value'));	% keep value
+
+callBack_read_dir_tree_fcn();
+
+count = size(current_tree, 2);
+
+set(AINS_project.Slider_1, 'Min', 1);
+set(AINS_project.Slider_1, 'Max', count);
+set(AINS_project.Slider_1, 'Value', val);	% set old value
+if (count &gt; 1)
+  stepsize = 1/(count-1);
+else
+  stepsize = 1;
+end
+set(AINS_project.Slider_1, 'Sliderstep', [stepsize 0.1]);
+
+AINS_project_Slider_1_doIt([], [], AINS_project);	% show current pic (it maybe has changed)
+</uiControl>
+    <uiControl class="callBackCtrl" Arguments="" functionName="callBack_read_dir_tree_fcn" Name="callBack_read_dir_tree" Position="[770 185 52 52]">% This code can define a callback.
+% You must associate them to figure or control onload like event window
+
+global param_project;
+global current_tree;
+global default_settings;
+global local_settings;
+global doDebug;
+
+% read all project directories
+[folders, err, msg] = readdir(param_project.project_path);
+if err != 0
+  disp(msg);
+  return;
+end
+
+current_tree = cell(3,1000);
+
+if (~isfield(default_settings, 'default_icon'))
+  default_settings.default_icon       = local_settings.default_icon;	% if no picture present use default replacement
+  default_settings.default_icon_path  = local_settings.default_icon_path; 
+  default_settings.default_file       = local_settings.default_file; 
+end
+
+default_icon = default_settings.default_icon;	% if no picture present use default replacement
+
+% collect all active folders + pictures
+counter = 1;
+for k = 1:size(folders,1)
+  foldername = [param_project.project_path '/' folders(k,1){1}];
+  if ~isfolder(foldername) || strcmp(folders(k,1){1}, '.') || strcmp(folders(k,1){1}, '..') || strcmp(folders(k,1){1}, '_icons')
+    %    disp(sprintf('-&gt; not a folder: %s', foldername))
+    continue;
+  end
+  
+  %  disp(sprintf('\n-&gt; check folder %s...', foldername))
+  %  cd (foldername);
+  files = glob([foldername '/*' local_settings.default_fileext]);
+  
+  for m = 1:size(files,1)
+    [dir, name, ext] = fileparts(files(m,1){1});
+    filename = [foldername '\' files(m,1){1}];
+    current_tree(1, counter) = folders(k,1){1}; %foldername;
+    current_tree(2, counter) = [name ext]; %files(m,1){1};
+    
+    if isfile([default_settings.default_icon_path '\tn_' folders(k,1){1} '_' name '.png'])
+      % try thumbs folder _icons
+      dbg_disp(sprintf('found pic in thumbs folder: %s', [default_settings.default_icon_path '\tn_' folders(k,1){1} '_' name '.png']), doDebug, __FILE__, __LINE__);
+      current_tree(3, counter) = strrep([default_settings.default_icon_path '\tn_' folders(k,1){1} '_' name '.png'], '\', '/');
+    elseif isfile([foldername '/' name '.png'])
+      % use full size graphics
+      dbg_disp(sprintf('PREVIEW PIC IN FULL FORMAT: %s', [foldername '/' name '.png']), doDebug, __FILE__, __LINE__);
+      current_tree(3, counter) = [foldername '/' name '.png'];
+    else
+      % no picture found -&gt; use default one
+      dbg_disp('no pic found at all -&gt; take default pic', doDebug, __FILE__, __LINE__);
+      current_tree(3, counter) = default_settings.default_icon;
+    end
+    
+    
+    counter = counter + 1;
+    %    disp(filename)
+  end
+end
+
+
+%cd (param_project.project_path);
+
+count = counter - 1;
+if count == 0
+  count = 1;
+end
+
+%disp('-&gt; callBack_read_dir_tree - current_tree:')
+current_tree = resize(current_tree, 3, count);
+
+</uiControl>
+    <uiControl class="groupPanel" BackgroundColor="[0.941 0.941 0.941]" BorderWidth="1" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" Name="GroupPanel_1" Position="[313 245 543 179]" Title="Create new project" TitlePosition="lefttop" visible="on">
+        <ContainerSrc/>
+        <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="" Name="b_new_folder" Position="[15 100 110 22]" String="New folder" TooltipString="Only select an existing directory if you want to create a new file therein" visible="on">% This code will be executed when user click the button control.
+
+global param_project;
+
+pp = uigetdir(param_project.project_path, 'Choose project directory OR cancel dialog and enter new name');
+
+if (pp != 0) &amp;&amp; isfolder(pp)
+  [dir, name, ext] = fileparts(pp);
+  %param_project.active_folder = name;
+  set(AINS_project.ed_new_folder, 'string', name);
+else
+  disp(sprintf('%s not found', pp))
+end
+</uiControl>
+        <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="" Name="b_new_file" Position="[15 140 110 22]" String="New file" TooltipString="" visible="on">% This code will be executed when user click the button control.</uiControl>
+        <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_new_folder" Position="[133 100 276 22]" String="&lt;enter&gt;" TooltipString="Enter a new name or select an existing directory" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+
+% maintain logo on 'create' button
+AINS_project_t_new_project_doIt([], [], AINS_project);
+
+return;
+
+global param_project;
+global default_settings;
+global local_settings;
+
+% check if entries allow for creating the project
+
+% 1. clone project? -&gt; then check also active entries
+clone = get(AINS_project.t_clone_file, 'Value');
+if clone
+  activeFolder = get(AINS_project.ed_active_folder, 'string');
+  activeFile = get(AINS_project.ed_active_file, 'string');
+  if length(activeFolder) &gt; 0 &amp;&amp; length(activeFile) &gt; 0 &amp;&amp; isfolder(activeFolder) &amp;&amp; isfile([activeFolder '/' activeFile])
+    % folder and file in folder exist -&gt; don't indicate ok yet
+%    set(AINS_project.b_create, 'cdata', local_settings.icon_dialog_ok);
+    activeFile = [activeFolder '/' activeFile];
+  else
+    % cannot clone because active file not found -&gt; abort here
+    set(AINS_project.b_create, 'cdata', local_settings.icon_dialog_no);
+    disp('active file not found: cannot clone, creating aborted...')
+    return;
+  end
+else
+  activeFile = default_settings.default_file;
+  if !isfile(activeFile)
+    activeFile
+    disp('b_create -&gt; default_file not found: aborted...')
+    return;  
+  end
+end
+
+newFolder = get(AINS_project.ed_new_folder, 'string');
+newFile = get(AINS_project.ed_new_file, 'string');
+
+if length(newFolder) == 0 || length(newFile) == 0 
+  % folder and file in folder exist -&gt; don't supersede! -&gt; indicate no -&gt; abort here
+  set(AINS_project.b_create, 'cdata', local_settings.icon_dialog_no);
+ disp('no entries in new folder/new file found: creating aborted...')
+  return;  
+elseif isfolder(newFolder) &amp;&amp; isfile([newFolder '/' newFile])
+  % folder and file in folder exist -&gt; don't supersede! -&gt; indicate no -&gt; abort here
+  set(AINS_project.b_create, 'cdata', local_settings.icon_dialog_no);
+ disp('new file already exists in new folder: superseding not permitted, creating aborted...')
+  return;  
+else
+  set(AINS_project.b_create, 'cdata', local_settings.icon_dialog_ok);
+  % set defaut active file
+%  newFile = [newFolder '/' newFile];
+end
+</uiControl>
+        <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_new_file" Position="[133 140 276 22]" String="&lt;enter&gt;" TooltipString="Enter a file name that does not exist in new folder" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+
+global default_settings;
+global local_settings;
+
+% correct file name
+currentfile = get(AINS_project.ed_new_file, 'string');
+
+%filename = 'test.o1';
+%flt_fileext = {&quot;*.a1;*.o1;*.ains&quot;, &quot;Supported Formats&quot;}
+list = strsplit(local_settings.flt_fileext{1}, ';');
+hasValidEnding = false;
+for m = 1:size(list,2)
+  if endsWith(currentfile, list(1,m){1}(2:end))	% cut off starting '*'
+    hasValidEnding = true;
+    break;
+  end
+end
+
+if length(currentfile) &gt; 0 &amp;&amp; !hasValidEnding 		%!endsWith(currentfile, '.ains')
+  set(AINS_project.ed_new_file, 'string', [currentfile local_settings.default_fileext]);
+end
+
+% maintain logo on 'create' button
+AINS_project_t_new_project_doIt([], [], AINS_project);
+
+return;
+
+global param_project;
+global default_settings;
+
+% check if entries allow for creating the project
+
+% 1. clone project? -&gt; then check also active entries
+clone = get(AINS_project.t_clone_file, 'Value');
+if clone
+  activeFolder = get(AINS_project.ed_active_folder, 'string');
+  activeFile = get(AINS_project.ed_active_file, 'string');
+  if length(activeFolder) &gt; 0 &amp;&amp; length(activeFile) &gt; 0 &amp;&amp; isfolder(activeFolder) &amp;&amp; isfile([activeFolder '/' activeFile])
+    % folder and file in folder exist -&gt; don't indicate ok yet
+%    set(AINS_project.b_create, 'cdata', local_settings.icon_dialog_ok);
+    activeFile = [activeFolder '/' activeFile];
+  else
+    % cannot clone because active file not found -&gt; abort here
+    set(AINS_project.b_create, 'cdata', local_settings.icon_dialog_no);
+%    disp('active file not found: cannot clone, creating aborted...')
+    return;
+  end
+else
+  activeFile = default_settings.default_file;
+  if !isfile(activeFile)
+    activeFile
+    disp('b_create -&gt; default_file not found: aborted...')
+    return;  
+  end
+end
+
+newFolder = get(AINS_project.ed_new_folder, 'string');
+newFile = get(AINS_project.ed_new_file, 'string');
+
+if length(newFolder) == 0 || length(newFile) == 0 
+  % folder and file in folder exist -&gt; don't supersede! -&gt; indicate no -&gt; abort here
+  set(AINS_project.b_create, 'cdata', local_settings.icon_dialog_no);
+%  disp('no entries in new folder/new file found: creating aborted...')
+  return;  
+elseif isfolder(newFolder) &amp;&amp; isfile([newFolder '/' newFile])
+  % folder and file in folder exist -&gt; don't supersede! -&gt; indicate no -&gt; abort here
+  set(AINS_project.b_create, 'cdata', local_settings.icon_dialog_no);
+%  disp('new file already exists in new folder: superseding not permitted, creating aborted...')
+  return;  
+else
+  set(AINS_project.b_create, 'cdata', local_settings.icon_dialog_ok);
+  % set defaut active file
+%  newFile = [newFolder '/' newFile];
+end
+</uiControl>
+        <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="dialog-no-2.png" Name="b_create" Position="[428 100 103 64]" String="Create" TooltipString="" visible="on">% This code will be executed when user click the button control.
+
+global param_project;
+global default_settings;
+global dlgAinsProjectStatus;
+global local_settings;
+
+activeFile = '';
+
+% check if entries allow for creating the project
+
+% 1. clone project? -&gt; then check also active entries
+clone = get(AINS_project.t_clone_file, 'Value');
+if clone
+  activeFolder = get(AINS_project.ed_active_folder, 'string');
+  activeFile = get(AINS_project.ed_active_file, 'string');
+  if length(activeFolder) &gt; 0 &amp;&amp; length(activeFile) &gt; 0 &amp;&amp; isfolder(activeFolder) &amp;&amp; isfile([activeFolder '/' activeFile])
+    % folder and file in folder exist -&gt; don't indicate ok yet
+    %    set(AINS_project.b_create, 'cdata', local_settings.icon_dialog_ok);
+    activeFile = [activeFolder '/' activeFile];
+  else
+    % cannot clone because active file not found -&gt; abort here
+    set(AINS_project.b_create, 'cdata', local_settings.icon_dialog_no);
+    disp('active file not found: cannot clone, creating aborted...')
+    return;
+  end
+else
+  activeFile = local_settings.default_file; 
+  %activeFile = default_settings.default_file;
+  %  if !isfile(activeFile)
+  %    activeFile
+  %    disp('b_create -&gt; default_file not found: creating aborted...')
+  %    return;  
+  %  end
+end
+
+newFolder = get(AINS_project.ed_new_folder, 'string');
+new_File = get(AINS_project.ed_new_file, 'string');
+
+if length(newFolder) == 0 || length(new_File) == 0 
+  % folder and file in folder exist -&gt; don't supersede! -&gt; indicate no -&gt; abort here
+  set(AINS_project.b_create, 'cdata', local_settings.icon_dialog_no);
+  disp('no entries in new folder/new file found: creating aborted...')
+  return;  
+elseif isfolder(newFolder) &amp;&amp; isfile([newFolder '/' new_File])
+  % folder and file in folder exist -&gt; don't supersede! -&gt; indicate no -&gt; abort here
+  set(AINS_project.b_create, 'cdata', local_settings.icon_dialog_no);
+  disp('new file already exists in new folder: superseding not permitted, creating aborted...')
+  return;  
+else
+  set(AINS_project.b_create, 'cdata', local_settings.icon_dialog_ok);
+  % set defaut active file
+  newFile = [newFolder '/' new_File];
+end
+
+
+% 2. create new folder (if necessary)
+if !isfolder(newFolder)
+  disp('b_create -&gt; create directory...')
+  [status, msg, msgid] = mkdir(param_project.project_path, newFolder);
+  if !status
+    % problem occured
+    disp(msg)
+    return;
+  end
+  disp('...created')
+end
+
+% 3. create new file
+if isfile(newFile)
+  disp('b_create -&gt; SHOULD NEVER HAPPEN: file already exists, creating aborted...')
+  return;
+end
+
+if size(activeFile) &gt; 0
+  disp('b_create -&gt; copy file...')
+  [status, msg, msgid] = my_copy(activeFile, newFile)
+  if !status
+    disp('b_create -&gt; problem occured:')
+    disp(msg)
+    pwd()
+    activeFile
+    newFile
+    return;
+  end
+  disp('...copied')
+else
+  disp('b_crate -&gt; problem with activeFile:');
+  size(activeFile)
+  activeFile
+end
+
+param_project.active_folder = newFolder;
+param_project.active_file = new_File;
+
+dlgAinsProjectStatus = 'create';
+close(AINS_project.figure);
+</uiControl>
+        <uiControl class="toggleCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="arrow-down-2.png" Name="t_new_project" Position="[134 30 132 47]" String="New project" TooltipString="Copy a default file into new folder using new file name" Value="select" visible="on">% The code you add here will be executed every time the toggle control is pressed.
+
+stateNP = get(AINS_project.t_new_project, 'Value');
+stateCF = get(AINS_project.t_clone_file, 'Value');
+
+if (stateNP == stateCF)
+  set(AINS_project.t_clone_file, 'Value', ~stateNP);
+end
+
+global param_project;
+global default_settings;
+global local_settings;
+
+% check if entries allow for creating the project
+
+% 1. clone project? -&gt; then check also active entries
+clone = ~stateNP;
+if clone
+  activeFolder = get(AINS_project.ed_active_folder, 'string');
+  activeFile = get(AINS_project.ed_active_file, 'string');
+  if isfolder(activeFolder) &amp;&amp; isfile([activeFolder '/' activeFile])
+    % folder and file in folder exist -&gt; don't indicate ok yet
+%    set(AINS_project.b_create, 'cdata', local_settings.icon_dialog_ok);
+  else
+    % cannot clone because active file not found -&gt; abort here
+    set(AINS_project.b_create, 'cdata', local_settings.icon_dialog_no);
+    disp('set active file: cannot clone, creating prevented...')
+    return;
+  end
+end
+
+newFolder = get(AINS_project.ed_new_folder, 'string');
+newFile = get(AINS_project.ed_new_file, 'string');
+
+if isfolder(newFolder) &amp;&amp; isfile([newFolder '/' newFile])
+  % folder and file in folder exist -&gt; don't supersede! -&gt; indicate no -&gt; abort here
+  set(AINS_project.b_create, 'cdata', local_settings.icon_dialog_no);
+  disp('new file already exists in new folder: superseding not permitted, creating prevented...')
+  return;  
+else
+  set(AINS_project.b_create, 'cdata', local_settings.icon_dialog_ok);
+  % set defaut active file
+%  activeFile = default_settings.default_file;
+end
+</uiControl>
+        <uiControl class="toggleCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="arrow-down-3.png" Name="t_clone_file" Position="[279 30 132 47]" String="Clone file" TooltipString="Copy content of active file into new file name within new folder" Value="deselect" visible="on">% The code you add here will be executed every time the toggle control is pressed.
+
+stateNP = get(AINS_project.t_new_project, 'Value');
+stateCF = get(AINS_project.t_clone_file, 'Value');
+
+if (stateNP == stateCF)
+  set(AINS_project.t_new_project, 'Value', ~stateCF);
+end
+
+AINS_project_t_new_project_doIt([], [], AINS_project);
+</uiControl>
+    </uiControl>
+    <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="" Name="b_close_MP" Position="[760 15 90 44]" String="close" TooltipString="" visible="on">% This code will be executed when user click the button control.
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallback' from the properties editor
+
+close(AINS_project.figure);
+</uiControl>
+    <uiControl class="callBackCtrl" Arguments="AINS_project" functionName="callBack_close_dlg_fcn" Name="callBack_close_dlg" Position="[815 5 52 52]">% This code can define a callback.
+% You must associate them to figure or control onload like event window
+
+set(AINS_project.figure, 'visible', 'off');
+
+closereq();
+</uiControl>
+</dialog>

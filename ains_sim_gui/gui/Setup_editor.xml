@@ -1,0 +1,852 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dialog Color="[0.941 0.941 0.941]" HPosition="center" Name="Setup_editor" Position="[0 466 923 614]" Resize="on" VPosition="center" windowStyle="normal">
+    <GlobalSrc>%
+% The source code written here will be executed when
+% windows load. Works like 'onLoad' event of other languages.
+%
+
+global param_setup;
+global dlgME1dStatus;
+global depot;
+global doDebug;
+global domains;
+global button_info;
+
+domains.meters = [param_setup.x_min param_setup.y_min param_setup.x_max param_setup.y_max];
+domains.percent = [0 0 1 1];
+domains.cells = [0 0 param_setup.Xmax param_setup.Ymax];
+domains.METERS = 1;
+domains.PERCENT = 2;
+domains.CELLS = 3;
+
+domains.X_MIN = 1;		% x start position
+domains.Y_MIN = 2;		% y start position 
+domains.X_MAX = 3;		% x end position in materials
+domains.Y_MAX = 4;		% y end position in materials
+domains.MAT_TYPE =5;		% material type in materials
+
+domains.SIGMA = 5;		% x end position in sources
+%domains.OPENING = 4;		% y end position in sources
+%domains.VELOCITY = 5;		% velocity in sources
+
+domains.ADD_PHI = 6;		% additional phi (for sources; materials phi should be defined in depot)
+domains.DOM = 7:10;		% start position for domain
+domains.DOM_DEF = 11;		% definition of domain (absolute=domains.METERS, domains.PERCENT, domains.CELLS)
+
+domains.MAT_SRC_IND = 12;	% position in param_setup.materials(:,domains.MAT_SRC_IND) to identify:
+domains.MAT_IND = 1000;		% ...if it's a material
+domains.SRC_IND = 2000;		% ...or a source
+
+domains.ROT = 13;		% rotation
+domains.X_ROT = 14;		% x-position of rotation
+domains.Y_ROT = 15;		% x-position of rotation
+
+
+dbg_disp('entering Setup_editor');
+
+% changes get active by clicking &quot;Save&quot;
+p_setup = param_setup;
+
+if rows(p_setup.materials) &gt; 0 &amp;&amp; columns(p_setup.materials) &lt; 12
+  p_setup.materials(:, 7:15) = 0;	% add space for new model
+  p_setup.materials(:, 7)  = 0;	% default definition domain [0 0 1 1] = per cent description
+  p_setup.materials(:, 8)  = 0;	% default definition domain [0 0 1 1] = per cent description
+  p_setup.materials(:, 9)  = 1;	% default definition domain [0 0 1 1] = per cent description
+  p_setup.materials(:, 10) = 1;	% default definition domain [0 0 1 1] = per cent description
+  p_setup.materials(:, domains.DOM_DEF)     = domains.PERCENT;	% default indicator for &quot;per cent&quot; description
+  p_setup.materials(:, domains.MAT_SRC_IND) = domains.MAT_IND;	% this is a material (not a source)
+  p_setup.materials(:, domains.ROT)   = 0;	% default
+  p_setup.materials(:, domains.X_ROT) = 0;	% default
+  p_setup.materials(:, domains.Y_ROT) = 0;	% default
+
+  % prepare for 2d
+  p_setup.materials(:, domains.Y_MIN) = 0.0;
+  p_setup.materials(:, domains.Y_MAX) = 1.0;
+end
+
+
+mat_depot_string = '';
+for m = 1:rows(depot.material_names)
+  if m == 1
+    mat_depot_string = [mat_depot_string depot.material_names(m,:)];
+  else
+    mat_depot_string = [mat_depot_string '|' depot.material_names(m,:)];
+  end
+end
+set(Setup_editor.cb_depot_materials, 'String', mat_depot_string);
+
+
+set(Setup_editor.figure, 'closerequestfcn', {@callBack_close_ME1d_fcn, Setup_editor});
+%set(Setup_editor.Slider_ME1d, 'callback', {@callBack_read_materials_fcn, Setup_editor});
+%set(Setup_editor.Image_3, 'buttondownfcn', {@callBack_mouse_fcn, Setup_editor});
+
+%button_info = 0;
+%set(gcf(), 'windowbuttondownfcn', {@callBack_windowbuttondownfcn_fcn, Setup_editor});
+%set(gcf(), 'windowbuttonmotionfcn', {@callBack_windowbuttonmotionfcn_fcn, Setup_editor});
+%set(gcf(), 'windowbuttonupfcn', {@callBack_windowbuttonupfcn_fcn, Setup_editor});
+
+%set(Setup_editor.figure, 'visible', 'off');
+
+
+set(Setup_editor.figure, 'numbertitle', 'off');
+set(Setup_editor.figure, 'name', 'Setup_editor');
+grid on;
+
+if rows(p_setup.sources) &gt; 0 &amp;&amp; columns(p_setup.sources) &lt; 12
+  p_setup.sources(:, 7:15) = 0;	% add space for new model
+  p_setup.sources(:, 7)  = 0;	% default definition domain [0 0 1 1] = per cent description
+  p_setup.sources(:, 8)  = 0;	% default definition domain [0 0 1 1] = per cent description
+  p_setup.sources(:, 9)  = 1;	% default definition domain [0 0 1 1] = per cent description
+  p_setup.sources(:, 10) = 1;	% default definition domain [0 0 1 1] = per cent description
+  p_setup.sources(:, domains.DOM_DEF)     = domains.PERCENT;	% default indicator for &quot;per cent&quot; description
+  p_setup.sources(:, domains.MAT_SRC_IND) = domains.SRC_IND;	% this is a source (not a material)
+  p_setup.sources(:, domains.ROT)   = 0;	% default
+  p_setup.sources(:, domains.X_ROT) = 0;	% default
+  p_setup.sources(:, domains.Y_ROT) = 0;	% default
+	
+  % definition changed:
+  phi = acotd(p_setup.sources(:, 3));
+  idx = find(phi &lt; 0);
+  phi(idx) = phi(idx) + 180;
+
+  p_setup.sources(:, domains.ROT)     = phi;				% is an angle now: calculate via velocities...
+  p_setup.sources(:, domains.SIGMA)   = p_setup.sources(:, 5);		% sigma changed its position
+%  p_setup.sources(:, domains.ADD_PHI) = p_setup.sources(:, 4);		% additional phi changed its position
+  p_setup.sources(:, domains.X_MAX)   = p_setup.sources(:, 1) + 0.04;	% opening is now: x_max - x_min
+  p_setup.sources(:, domains.Y_MAX)   = 0.04;	                	% used for visualisation only
+end
+
+%for n = 1:rows(p_setup.sources)
+%  if p_setup.sources(n,11) == 0
+%    p_setup.sources(n, 7:11) = [0 0 1 1 2];	% preset domain to [0 0 1 1] + per cent (= 2)
+%  end
+%end
+
+p_setup.materials = [p_setup.materials; p_setup.sources];
+
+setappdata(gcf(), 'param_setup', p_setup);
+setappdata(gcf(), 'depot', depot);
+
+%axis(AINS_project.Image_2);
+%axis off;
+
+set(Setup_editor.la_max_meters, 'string', num2str(param_setup.x_max));
+set(Setup_editor.la_min_meters, 'string', num2str(param_setup.x_min));
+set(Setup_editor.la_max_percent, 'string', '1');
+set(Setup_editor.la_min_percent, 'string', '0');
+set(Setup_editor.la_max_cells, 'string', num2str(param_setup.Xmax));
+set(Setup_editor.la_min_cells, 'string', '0');
+
+count = size(p_setup.materials, 1);
+
+set(Setup_editor.Slider_ME1d, 'Min', 1);
+set(Setup_editor.Slider_ME1d, 'Max', count);
+if (count &gt; 1)
+  stepsize = 1/(count-1);
+else
+  stepsize = 1;
+end
+set(Setup_editor.Slider_ME1d, 'Sliderstep', [stepsize 1]);
+
+set(Setup_editor.Slider_ME1d, 'Value', 1);
+set(Setup_editor.la_material_number, 'string', '1');
+
+
+
+% set default
+dlgME1dStatus = 'cancelled';
+
+%set(Setup_editor.figure, 'visible', 'on');
+
+
+%refresh();
+
+% own handler
+movePlottedItems('dimension', '1d', 'cleanup_fcn', 'callBack_read_materials_fcn', 'cln_arg', Setup_editor, 'debug', 0); %doDebug);
+callBack_read_materials_fcn([], [], Setup_editor);
+
+%C = @callBack_read_materials_fcn;
+%M = Setup_editor;
+%
+%ishandle('callBack_read_materials_fcn')
+%ishandle('Setup_editor')
+%ishandle('C')
+%type('Setup_editor')
+%
+%C([], [], M);
+</GlobalSrc>
+    <uiControl class="imgCtrl" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" Name="Image_3" Position="[366 10 530 530]" visible="on"/>
+    <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="" Name="b_new_wall" Position="[24 413 97 38]" String="new wall" TooltipString="add a new wall" visible="on">% This code will be executed when user click the button control.
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallback' from the properties editor
+
+%global param_setup;
+%global depot;
+global doDebug;
+global domains;
+
+param_setup = getappdata(gcf(), 'param_setup');
+
+dbg_disp('b_new_wall');
+
+dlgME1dStatus = 'added';
+
+
+% get the actual domain (i.e. selected in dialog)
+D = [domains.meters; domains.percent; domains.cells];
+if get(Setup_editor.RadioButton_meters, 'Value')
+  D2 = D(domains.METERS,:);
+  num = 1;
+elseif get(Setup_editor.RadioButton_percent, 'Value')
+  D2 = D(domains.PERCENT,:);
+  num = 2;
+else
+  D2 = D(domains.CELLS,:);
+  num = 3;
+end  
+
+param_setup.materials = [param_setup.materials; 0.1 0 0.13 1,...	% default: x = 0.1..0.13
+						1 0,... 		% material number = 1, additional phi = 0
+						[D2 num],...		% actual domain + indicaotr of domain, e.g. [0 0 1 1] + per cent = 2
+						domains.MAT_IND,...	% indicator for material
+						0 0 0];			% rotation in degree + coords or rotation (x,y)
+%param_setup.materials(end, 7:11) = [D2 num];	% actual domain + number of domain
+
+setappdata(gcf(), 'param_setup', param_setup);  
+
+
+count = size(param_setup.materials, 1);
+
+set(Setup_editor.Slider_ME1d, 'Min', 1);
+set(Setup_editor.Slider_ME1d, 'Max', count);
+%set(Setup_editor.Slider_ME1d, 'Value', count);
+
+handles = guidata(gcf());
+handles.number = count; %fix(get(Setup_editor.Slider_ME1d, 'Value'));
+
+guidata(gcf(), handles);
+
+
+if (count &gt; 1)
+  stepsize = 1/(count-1);
+else
+  stepsize = 1;
+end
+set(Setup_editor.Slider_ME1d, 'Sliderstep', [stepsize 1]);
+
+callBack_read_materials_fcn([], [], Setup_editor);
+
+</uiControl>
+    <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="" Name="b_delete_wall" Position="[234 413 97 38]" String="delete" TooltipString="delete this material" visible="on">% This code will be executed when user click the button control.
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallback' from the properties editor
+
+%global param_setup;
+%global depot;
+global doDebug;
+global domains;
+
+param_setup = getappdata(gcf(), 'param_setup');  
+
+dbg_disp('b_delete_wall');
+
+dlgME1dStatus = 'deleted';
+
+
+current_mat = str2num(get(Setup_editor.la_material_number, 'String'));
+if current_mat &gt; 0 &amp;&amp; current_mat &lt;= rows(param_setup.materials)
+  param_setup.materials(current_mat, :) = [];  % delete current material
+end
+
+count = size(param_setup.materials, 1);
+
+set(Setup_editor.Slider_ME1d, 'Min', 1);
+set(Setup_editor.Slider_ME1d, 'Max', count);
+%set(Setup_editor.Slider_ME1d, 'Value', 1);
+
+handles = guidata(gcf());
+handles.number = 1; %fix(get(Setup_editor.Slider_ME1d, 'Value'));
+
+guidata(gcf(), handles);
+
+
+if (count &gt; 1)
+  stepsize = 1/(count-1);
+else
+  stepsize = 1;
+end
+set(Setup_editor.Slider_ME1d, 'Sliderstep', [stepsize 1]);
+
+setappdata(gcf(), 'param_setup', param_setup);
+
+callBack_read_materials_fcn([], [], Setup_editor);
+</uiControl>
+    <uiControl class="sliderCtrl" BackgroundColor="[0.941 0.941 0.941]" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Max="99" Min="0" Name="Slider_ME1d" Position="[10 535 217 22]" TooltipString="" Value="1" visible="on">% This code will be executed when user change the value of slider.
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallback' from the properties editor
+
+global doDebug;
+
+dbg_disp('entering Slider_ME1d', doDebug);
+
+handles = guidata(gcf());
+handles.number = fix(get(Setup_editor.Slider_ME1d, 'Value'));
+
+guidata(gcf(), handles);
+
+callBack_read_materials_fcn([], [], Setup_editor);
+</uiControl>
+    <uiControl class="buttonGroup" BackgroundColor="[0.941 0.941 0.941]" BorderWidth="1" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" Name="ButtonGroup_1" Position="[12 5 321 97]" Title="Domain" TitlePosition="lefttop" visible="on">
+        <ContainerSrc/>
+        <uiControl class="radioButtonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="RadioButton_meters" Position="[70 20 89 23]" String="meters" TooltipString="" Value="deselect" visible="on">
+%global param_setup;
+global domains;
+
+axis(Setup_editor.Image_3, domains.meters([1 3 2 4])); 
+</uiControl>
+        <uiControl class="radioButtonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="RadioButton_percent" Position="[155 20 89 23]" String="per cent" TooltipString="" Value="select" visible="on">
+%global param_setup;
+global domains;
+
+axis(Setup_editor.Image_3, domains.percent([1 3 2 4])); 
+</uiControl>
+        <uiControl class="radioButtonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="RadioButton_cells" Position="[245 20 67 23]" String="cells" TooltipString="" Value="deselect" visible="on">
+%global param_setup;
+global domains;
+
+axis(Setup_editor.Image_3, domains.cells([1 3 2 4])); 
+</uiControl>
+        <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_16" Position="[15 70 38 19]" String="x min" TooltipString="" visible="on"/>
+        <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_18" Position="[16 45 41 19]" String="x max" TooltipString="" visible="on"/>
+        <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="center" isAutoSize="true" Name="la_max_meters" Position="[75 45 66 19]" String="Label_23" TooltipString="" visible="on"/>
+        <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="center" isAutoSize="true" Name="la_min_meters" Position="[75 70 66 19]" String="Label_24" TooltipString="" visible="on"/>
+        <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="center" isAutoSize="true" Name="la_max_percent" Position="[155 45 66 19]" String="Label_25" TooltipString="" visible="on"/>
+        <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="center" isAutoSize="true" Name="la_min_percent" Position="[155 70 66 19]" String="Label_26" TooltipString="" visible="on"/>
+        <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="center" isAutoSize="true" Name="la_max_cells" Position="[245 45 66 19]" String="Label_27" TooltipString="" visible="on"/>
+        <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="center" isAutoSize="true" Name="la_min_cells" Position="[245 70 66 19]" String="Label_28" TooltipString="" visible="on"/>
+    </uiControl>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_20" Position="[25 250 47 19]" String="x_start" TooltipString="" visible="on"/>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_21" Position="[120 250 46 19]" String="x_stop" TooltipString="" visible="on"/>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_x_start" Position="[25 271 90 22]" String="Edit_27" TooltipString="" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+%global param_setup;
+%global depot;
+global doDebug;
+global domains;
+
+param_setup = getappdata(gcf(), 'param_setup');  
+
+current_mat = str2num(get(Setup_editor.la_material_number, 'String'));
+x_start = str2num(get(Setup_editor.ed_x_start, 'String'));
+delta_x = param_setup.materials(current_mat, domains.X_MAX) - param_setup.materials(current_mat, domains.X_MIN);
+
+param_setup.materials(current_mat, domains.X_MIN) = x_start;
+param_setup.materials(current_mat, domains.X_MAX) = x_start + delta_x;
+set(Setup_editor.ed_x_stop, 'String', num2str(x_start + delta_x));
+
+setappdata(gcf(), 'param_setup', param_setup);  
+ 
+callBack_read_materials_fcn([], [], Setup_editor);
+</uiControl>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_x_stop" Position="[120 271 90 22]" String="Edit_28" TooltipString="defines the opening from x_start to x_stop for sources" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+%global param_setup;
+%global depot;
+global doDebug;
+global domains;
+
+param_setup = getappdata(gcf(), 'param_setup');  
+
+current_mat = str2num(get(Setup_editor.la_material_number, 'String'));
+x_stop = str2num(get(Setup_editor.ed_x_stop, 'String'));
+
+param_setup.materials(current_mat, domains.X_MAX) = x_stop;
+
+%isWall = logical(get(Setup_editor.RadioButton_wall, 'value'));
+%if ~isWall
+%  % for sources correct origin of rotation
+%  x_start = str2num(get(Setup_editor.ed_x_start, 'String'));
+%  x_rot = (x_stop + x_start)/2;
+%  param_setup.materials(current_mat, domains.X_ROT) = x_rot;
+%  set(Setup_editor.ed_x_rot, 'string', num2str(x_rot));
+%end
+ 
+setappdata(gcf(), 'param_setup', param_setup);  
+ 
+callBack_read_materials_fcn([], [], Setup_editor);
+</uiControl>
+    <uiControl class="cmbCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="cb_depot_materials" Position="[105 158 158 25]" String="Value A|Value B|Value C" TooltipString="" visible="on">
+%global param_setup;
+%global depot;
+global doDebug;
+global domains;
+
+param_setup = getappdata(gcf(), 'param_setup');  
+
+isWall = logical(get(Setup_editor.RadioButton_wall, 'value'));
+if ~isWall
+  return;	% material type is for walls only
+end
+
+current_mat = str2num(get(Setup_editor.la_material_number, 'String'));
+mat = get(Setup_editor.cb_depot_materials, 'Value');
+
+param_setup.materials(current_mat, domains.MAT_TYPE) = mat;
+
+setappdata(gcf(), 'param_setup', param_setup);  
+
+callBack_read_materials_fcn([], [], Setup_editor);
+</uiControl>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_22" Position="[105 135 57 19]" String="material" TooltipString="" visible="on"/>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="la_add_phi" Position="[225 295 54 19]" String="add phi" TooltipString="additional phase for wall or source" visible="on"/>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_add_phi" Position="[225 316 90 22]" String="Edit_30" TooltipString="additional phi provided by current part" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+%global param_setup;
+%global depot;
+global doDebug;
+global domains;
+
+param_setup = getappdata(gcf(), 'param_setup');  
+
+current_mat = str2num(get(Setup_editor.la_material_number, 'String'));
+add_phi = str2num(get(Setup_editor.ed_add_phi, 'String'));
+
+param_setup.materials(current_mat, domains.ADD_PHI) = add_phi
+ 
+setappdata(gcf(), 'param_setup', param_setup);  
+ 
+callBack_read_materials_fcn([], [], Setup_editor);
+</uiControl>
+    <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="" Name="b_close_ME1d" Position="[238 463 90 43]" String="Save" TooltipString="" visible="on">% This code will be executed when user click the button control.
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallback' from the properties editor
+
+MAT_SOURCE_INDICATOR = 12;	% position in param_setup.materials(:,MAT_SOURCE_INDICATOR) to identify:
+MATERIAL_IND = 1000;		% ...if it's a material
+SOURCE_IND   = 2000;		% ...or a source
+
+global param_setup;
+global doDebug;
+global domains;
+
+param_setup = getappdata(gcf(), 'param_setup');  % save the values back to globals
+
+% clean up and split materials and sources
+param_setup.sources = param_setup.materials;
+idx = find(param_setup.materials(:, MAT_SOURCE_INDICATOR) == SOURCE_IND);	% find all rows indicated as sources
+param_setup.materials(idx,:) = [];						% delete all sources from materials
+%param_setup.materials(:, MAT_SOURCE_INDICATOR) = [];				% clear the indicators
+
+idx = find(param_setup.sources(:, MAT_SOURCE_INDICATOR) == MATERIAL_IND);	% find all rows indicated as materials
+param_setup.sources(idx,:) = [];  						% delete all materials from sources
+%param_setup.sources(:, MAT_SOURCE_INDICATOR) = [];				% clear the indicators
+
+
+%param_setup
+%disp('SAVING NOT YET ENABLED...');
+
+close(Setup_editor.figure);
+
+</uiControl>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="20" FontWeight="bold" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="center" isAutoSize="false" Name="la_material_number" Position="[55 480 36 38]" String="Label_27" TooltipString="" visible="on"/>
+    <uiControl class="callBackCtrl" Arguments="this" functionName="callBack_close_ME1d_fcn" Name="callBack_close_ME1d" Position="[275 465 52 52]">% This code can define a callback.
+% You must associate them to figure or control onload like event window
+
+set(this.figure, 'visible', 'off');
+
+closereq();
+</uiControl>
+    <uiControl class="callBackCtrl" Arguments="this" functionName="callBack_read_materials_fcn" Name="callBack_read_materials" Position="[345 90 52 52]">% This code can define a callback.
+% You must associate them to figure or control onload like event window
+
+%MAT_SOURCE_INDICATOR = 12;	% position in param_setup.materials(:,MAT_SOURCE_INDICATOR) to identify:
+%MATERIAL_IND = 1000;		% ...if it's a material
+%SOURCE_IND   = 2000;		% ...or a source
+
+% is the number field defined for the handles structure?
+handles = guidata(gcf());
+if ~isfield(handles,'number');
+  handles.number = 1;
+  disp('warning: SET HANDLES.NUMBER IN CALLBACK_READ_MATERIALS - should already be set here!');
+end
+handles.plotHandles = [];
+
+
+%global param_setup;
+global domains;
+
+param_setup = getappdata(gcf(), 'param_setup');  
+
+hold off
+
+cla
+
+current_mat = handles.number; %fix(get(this.Slider_ME1d, 'Value'));
+set(this.Slider_ME1d, 'Value', current_mat);
+set(this.la_material_number, 'string', num2str(current_mat));
+set(this.la_num_of_materials, 'string', num2str(rows(param_setup.materials)));
+
+if rows(param_setup.materials) &gt;= current_mat
+  isWall = (param_setup.materials(current_mat, domains.MAT_SRC_IND) == domains.MAT_IND);
+  if isWall
+    set(this.RadioButton_wall, 'value', 1);
+  else
+    set(this.RadioButton_src, 'value', 1);
+  end
+  
+  set(this.ed_x_start, 'string', num2str(param_setup.materials(current_mat, domains.X_MIN)));
+  set(this.ed_x_stop, 'string', num2str(param_setup.materials(current_mat, domains.X_MAX)));
+  set(this.ed_y_start, 'string', num2str(param_setup.materials(current_mat, domains.Y_MIN)));
+  set(this.ed_y_stop, 'string', num2str(param_setup.materials(current_mat, domains.Y_MAX)));
+  
+  set(this.ed_rot, 'string', num2str(param_setup.materials(current_mat, domains.ROT)));
+  set(this.ed_x_rot, 'string', num2str(param_setup.materials(current_mat, domains.X_ROT)));
+  set(this.ed_y_rot, 'string', num2str(param_setup.materials(current_mat, domains.Y_ROT)));
+  
+  cMap = get(this.cb_depot_materials, 'string');
+  res = strsplit(cMap, '|');
+  %  for m = 1:size(res,2)
+  %    if strcmp(res(m){1}, param_setup.particle)
+  %      set(AINS_Simulator.cb_particle, 'Value', m);
+  %     break;
+  %    end
+  %  end
+  if isWall %param_setup.materials(current_mat, domains.MAT_SRC_IND) == domains.MAT_IND
+    set(this.cb_depot_materials, 'value', param_setup.materials(current_mat, domains.MAT_TYPE));
+    set(this.cb_depot_materials, 'visible', 'on');	% show popupmenu
+    set(this.ed_sigma, 'visible', 'off');		% hide sigma value -&gt; it's only for sources
+  else
+    set(this.ed_sigma, 'string', num2str(param_setup.materials(current_mat, domains.SIGMA)));
+    set(this.cb_depot_materials, 'visible', 'off');	% hide popupmenu
+    set(this.ed_sigma, 'visible', 'on');		% show sigma value -&gt; it's only for sources
+  end
+  set(this.ed_add_phi, 'string', num2str(param_setup.materials(current_mat, domains.ADD_PHI)));
+  dom = param_setup.materials(current_mat, domains.DOM_DEF);
+  if dom == domains.METERS
+    set(this.RadioButton_meters, 'value', 1);
+  elseif dom == domains.PERCENT
+    set(this.RadioButton_percent, 'value', 1);
+  else
+    set(this.RadioButton_cells, 'value', 1);
+  end
+  
+end
+
+% get the actual domain (i.e. selected in dialog)
+D = [domains.meters; domains.percent; domains.cells];
+if get(this.RadioButton_meters, 'Value')
+  D2 = D(domains.METERS,:);
+elseif get(this.RadioButton_percent, 'Value')
+  D2 = D(domains.PERCENT,:);
+else
+  D2 = D(domains.CELLS,:);
+end  
+
+%rectangle('Position', D2, 'FaceColor', 'w');	% repaint grounding
+
+% plot materials
+for m = 1:rows(param_setup.materials)
+  D1 = D(param_setup.materials(m, domains.DOM_DEF),:);		% get the definition domain for the current material -&gt; D1
+  rect = transformRectD1D2(param_setup.materials(m,:), D1, D2);	% transform from def. domain -&gt; actual domain
+  
+  
+  m1 = rect(1:4);
+  m2 = zeros(size(m1));
+  m2(1) = m1(1);				% x min
+  m2(2) = m1(2); %D2(2);			% y min
+  m2(4) = m1(4) - m1(2); %D2(4) - D2(2);	% y_max - y_min
+  m2(3) = m1(3) - m1(1);			% x_max - x_min
+
+  if param_setup.materials(m, domains.MAT_SRC_IND) == domains.MAT_IND
+    
+    % materials
+    if m == current_mat
+      h = rectangle (handles.axes1, 'Position', m2', 'EdgeColor', handles.active_color);		% it's currently picked up
+    else
+      h = rectangle (handles.axes1, 'Position', m2', 'EdgeColor', handles.passive_color);	% it's a wall
+    end
+    
+  else
+    
+    % sources
+    midpt_x = (m1(3)+m1(1))/2;
+    delta_x = midpt_x + 0.5*(D2(3) - D2(1))*cosd(param_setup.materials(m, domains.ROT));
+    delta_y = m2(2)   + 0.5*(D2(4) - D2(2))*sind(param_setup.materials(m, domains.ROT));
+   
+    if m == current_mat
+      h = rectangle (handles.axes1, 'Position', m2', 'EdgeColor', handles.active_color);		% it's currently picked up
+      line (handles.axes1, 'xdata', [midpt_x delta_x], 'ydata', [m2(2) delta_y], 'color', handles.active_color, 'linewidth', 1);
+    else
+      h = rectangle (handles.axes1, 'Position', m2', 'EdgeColor', 'g');				% it's a source
+      line (handles.axes1, 'xdata', [midpt_x delta_x], 'ydata', [m2(2) delta_y], 'color', 'g', 'linewidth', 1);
+    end
+    
+  end
+  
+  % update the plot handles to the array of plot handles
+  handles.plotHandles = [handles.plotHandles ; h];
+  
+  
+end
+
+% save the data
+guidata(gcf(), handles);
+
+
+axis(this.Image_3, D2([1 3 2 4]));	% restore limits
+grid on
+
+refresh()
+</uiControl>
+    <uiControl class="callBackCtrl" Arguments="this" functionName="callBack_mouse_fcn" Name="callBack_mouse" Position="[850 90 52 52]">% This code can define a callback.
+% You must associate them to figure or control onload like event window
+
+%global param_setup;
+
+param_setup = getappdata(gcf(), 'param_setup');  
+
+puts('clicked: ')
+
+pt = get(this.Image_3, 'currentpoint');
+disp(pt(:,1:2))
+
+p = param_setup.materials(:,1:4);
+
+hit = 0;
+for m = 1: rows(p)
+  poly = [p(m,1) p(m,2); p(m,3) p(m,2); p(m,3) p(m,4); p(m,1) p(m,4)];
+  if isPointInPolygon(pt(:,1:2), poly)
+    puts('hit: ');
+    disp(m);
+    hit = m;
+  end
+end
+
+if hit &gt; 0
+  set(this.Slider_ME1d, 'value', hit);
+%  callBack_read_materials_fcn([], [], this);
+end
+</uiControl>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_28" Position="[105 490 14 19]" String="of" TooltipString="" visible="on"/>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="20" FontWeight="bold" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="center" isAutoSize="false" Name="la_num_of_materials" Position="[135 480 41 38]" String="Label_29" TooltipString="" visible="on"/>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_sigma" Position="[105 209 90 22]" String="Edit_39" TooltipString="sigma of beam distribution" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+%global param_setup;
+%global depot;
+global doDebug;
+global domains;
+
+param_setup = getappdata(gcf(), 'param_setup');
+
+isWall = logical(get(Setup_editor.RadioButton_wall, 'value'));
+if isWall
+  return;	% sigma is for sources only
+end
+
+current_mat = str2num(get(Setup_editor.la_material_number, 'String'));
+sigma = str2num(get(Setup_editor.ed_sigma, 'String'));
+
+param_setup.materials(current_mat, domains.SIGMA) = sigma
+ 
+setappdata(gcf(), 'param_setup', param_setup);  
+ 
+callBack_read_materials_fcn([], [], Setup_editor);
+</uiControl>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_rot" Position="[25 371 90 22]" String="0" TooltipString="fixed on 1d" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+%global param_setup;
+%global depot;
+global doDebug;
+global domains;
+
+param_setup = getappdata(gcf(), 'param_setup');  
+
+current_mat = str2num(get(Setup_editor.la_material_number, 'String'));
+rot = str2num(get(Setup_editor.ed_rot, 'String'));
+
+param_setup.materials(current_mat, domains.ROT) = rot
+ 
+setappdata(gcf(), 'param_setup', param_setup);  
+ 
+callBack_read_materials_fcn([], [], Setup_editor);
+</uiControl>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="label_sig" Position="[105 190 43 19]" String="sigma" TooltipString="" visible="on"/>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="false" Name="label_rot" Position="[25 350 54 19]" String="rotation" TooltipString="rotation of wall" visible="on"/>
+    <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="" Name="b_new_source" Position="[129 413 97 38]" String="new src" TooltipString="add a new source" visible="on">% This code will be executed when user click the button control.
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallback' from the properties editor
+
+%global param_setup;
+%global depot;
+global doDebug;
+global domains;
+
+param_setup = getappdata(gcf(), 'param_setup');  
+
+dbg_disp('b_new_wall');
+
+dlgME1dStatus = 'added';
+
+
+% get the actual domain (i.e. selected in dialog)
+D = [domains.meters; domains.percent; domains.cells];
+if get(Setup_editor.RadioButton_meters, 'Value')
+  D2 = D(domains.METERS,:);
+  num = 1;
+elseif get(Setup_editor.RadioButton_percent, 'Value')
+  D2 = D(domains.PERCENT,:);
+  num = 2;
+else
+  D2 = D(domains.CELLS,:);
+  num = 3;
+end  
+
+%% SAVE SOURCES AS MATERIALS HERE -&gt; CHANGE THAT ON SAVING!
+param_setup.materials = [param_setup.materials; 0.2 0 0.21 0.05,...	% default: x_start y_start x_end y_end (for visual hight); opening = x_end - x_start
+                                                0.05 1.0,...		% sigma, additional phi = 0
+						[D2 num],...		% actual domain + indicaotr of domain, e.g. [0 0 1 1] + per cent=2
+						domains.SRC_IND,...	% indicator for sources
+						45 0 0];		% rotation in degree + coords or rotation (x,y)
+%param_setup.materials(end, 7:11) = [D2 num];	% actual domain + number of domain
+
+
+setappdata(gcf(), 'param_setup', param_setup);  
+
+
+count = size(param_setup.materials, 1);
+
+set(Setup_editor.Slider_ME1d, 'Min', 1);
+set(Setup_editor.Slider_ME1d, 'Max', count);
+%set(Setup_editor.Slider_ME1d, 'Value', count);
+
+handles = guidata(gcf());
+handles.number = count; %fix(get(Setup_editor.Slider_ME1d, 'Value'));
+
+guidata(gcf(), handles);
+
+
+if (count &gt; 1)
+  stepsize = 1/(count-1);
+else
+  stepsize = 1;
+end
+set(Setup_editor.Slider_ME1d, 'Sliderstep', [stepsize 1]);
+
+callBack_read_materials_fcn([], [], Setup_editor);
+
+</uiControl>
+    <uiControl class="buttonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" icon="" Name="b_quit" Position="[238 513 90 43]" String="Quit" TooltipString="Do not save and exit" visible="on">% This code will be executed when user click the button control.
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallback' from the properties editor
+
+close(Setup_editor.figure);
+</uiControl>
+    <uiControl class="buttonGroup" BackgroundColor="[0.941 0.941 0.941]" BorderWidth="1" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" Name="ButtonGroup_2" Position="[24 128 69 109]" Title="type" TitlePosition="lefttop" visible="on">
+        <ContainerSrc/>
+        <uiControl class="radioButtonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="RadioButton_wall" Position="[5 30 57 23]" String="wall" TooltipString="" Value="select" visible="on"/>
+        <uiControl class="radioButtonCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" Name="RadioButton_src" Position="[5 80 53 23]" String="src" TooltipString="" Value="deselect" visible="on"/>
+    </uiControl>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_y_start" Position="[25 316 90 22]" String="Edit_44" TooltipString="" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editorv
+
+%global param_setup;
+%global depot;
+global doDebug;
+global domains;
+
+param_setup = getappdata(gcf(), 'param_setup');  
+
+current_mat = str2num(get(Setup_editor.la_material_number, 'String'));
+y_start = str2num(get(Setup_editor.ed_y_start, 'String'));
+
+param_setup.materials(current_mat, domains.Y_MIN) = y_start
+
+setappdata(gcf(), 'param_setup', param_setup);  
+ 
+callBack_read_materials_fcn([], [], Setup_editor);
+</uiControl>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_y_stop" Position="[120 316 90 22]" String="Edit_45" TooltipString="for sources yet it''s a visual parameter only" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+%global param_setup;
+%global depot;
+global doDebug;
+global domains;
+
+param_setup = getappdata(gcf(), 'param_setup');  
+
+current_mat = str2num(get(Setup_editor.la_material_number, 'String'));
+y_stop = str2num(get(Setup_editor.ed_y_stop, 'String'));
+
+param_setup.materials(current_mat, domains.Y_MAX) = y_stop
+ 
+setappdata(gcf(), 'param_setup', param_setup);  
+ 
+callBack_read_materials_fcn([], [], Setup_editor);
+</uiControl>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_57" Position="[25 295 49 19]" String="y_start" TooltipString="" visible="on"/>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_58" Position="[120 295 48 19]" String="y_stop" TooltipString="" visible="on"/>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_x_rot" Position="[130 371 90 22]" String="Edit_46" TooltipString="" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+%global param_setup;
+%global depot;
+global doDebug;
+global domains;
+
+param_setup = getappdata(gcf(), 'param_setup');  
+
+current_mat = str2num(get(Setup_editor.la_material_number, 'String'));
+rot = str2num(get(Setup_editor.ed_x_rot, 'String'));
+
+param_setup.materials(current_mat, domains.X_ROT) = rot
+ 
+setappdata(gcf(), 'param_setup', param_setup);  
+ 
+callBack_read_materials_fcn([], [], Setup_editor);
+</uiControl>
+    <uiControl class="editCtrl" BackgroundColor="[1.000 1.000 1.000]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="true" HorizontalAlignment="left" Name="ed_y_rot" Position="[225 371 90 22]" String="Edit_47" TooltipString="" visible="on">% This code will be executed when de control lost focus and text has
+% been changed or when press the enter key
+% As default, all events are deactivated, to activate must set the
+% property 'generateCallBack' from the properties editor
+
+%global param_setup;
+%global depot;
+global doDebug;
+global domains;
+
+param_setup = getappdata(gcf(), 'param_setup');  
+
+current_mat = str2num(get(Setup_editor.la_material_number, 'String'));
+rot = str2num(get(Setup_editor.ed_y_rot, 'String'));
+
+param_setup.materials(current_mat, domains.Y_ROT) = rot
+ 
+setappdata(gcf(), 'param_setup', param_setup);  
+ 
+callBack_read_materials_fcn([], [], Setup_editor);
+</uiControl>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="label_rot_x" Position="[130 350 35 19]" String="x_rot" TooltipString="" visible="on"/>
+    <uiControl class="textCtrl" BackgroundColor="[0.941 0.941 0.941]" FontAngle="normal" FontName="Arial" FontSize="10" FontWeight="normal" ForegroundColor="[0.000 0.000 0.000]" GenerateCallBack="false" HorizontalAlignment="left" isAutoSize="true" Name="Label_60" Position="[225 350 37 19]" String="y_rot" TooltipString="" visible="on"/>
+</dialog>
